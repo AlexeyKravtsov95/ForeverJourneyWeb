@@ -16,9 +16,9 @@ export default function Cover({ journal, tr, lang }: Props) {
     .filter((value): value is number => typeof value === 'number')
   const firstMemory = times.length ? Math.min(...times) : undefined
   const lastMemory = times.length ? Math.max(...times) : undefined
-  const exportedAt = Date.parse(journal.exportedAt)
+  const exportedAt = journal.exportedAt
   const start = journey.startedAt ?? firstMemory
-  const end = lastMemory ?? (Number.isNaN(exportedAt) ? undefined : exportedAt)
+  const end = lastMemory ?? exportedAt
 
   const metaParts = [character.race, character.class]
   if (character.level > 0) metaParts.push(fmt(tr.levelN, { level: character.level }))

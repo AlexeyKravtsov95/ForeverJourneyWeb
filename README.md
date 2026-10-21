@@ -11,7 +11,9 @@
 
 - **Импорт формата `FJBOOK1`** — реальный формат экспорта аддона:
   `FJBOOK1:<part>/<total>:<checksum>:<base64>`, где внутри — UTF-8 JSON (`FJJOURNAL`, версия 1),
-  а контрольная сумма Adler-32 считается по исходным байтам JSON.
+  а контрольная сумма Adler-32 считается по исходным байтам JSON и пишется экспортёром
+  в uppercase-HEX (`string.format("%08X", …)`); сайт принимает также lowercase-HEX и десятичную
+  запись. Даты в экспорте — Unix-секунды (также принимаются мс и ISO-строки).
 - Поддержка **одного блока и многочастного экспорта** (части можно вставлять в любом порядке,
   дубликаты одинаковых частей игнорируются, при нехватке частей показывается, каких именно).
 - Проверка: порядка/полноты частей, дубликатов, контрольной суммы (десятичной и hex),
@@ -41,11 +43,21 @@ npm run generate:codes
 ```
 
 Скрипт (независимая реализация экспортёра) создаст папку `fixtures/` с файлами:
-`sample-en.txt`, `sample-ru.txt` (кириллица), `sample-large-80.txt` (80 записей),
-`sample-empty.txt`, `hex-checksum.txt`, `broken-checksum.txt` (битая контрольная сумма),
-`missing-part.txt` (не хватает 2-й части). Вставьте содержимое любого файла в поле на сайте
-и нажмите «Import Journal». Также можно нажать **Try Demo Journal** — демо-код проходит
-через тот же многочастный конвейер импорта.
+`sample-en.txt`, `sample-ru.txt` (кириллица), `lua-style.txt` и `lua-style-perpart.txt`
+(паритет с `JournalExport.lua`: uppercase-HEX checksum, Unix-секунды, оба способа нарезки),
+`sample-large-80.txt` (80 записей), `sample-empty.txt`, `broken-checksum.txt` (битая
+контрольная сумма), `missing-part.txt` (не хватает 2-й части), а также журналы для
+PDF-проверки (`journal-59.txt`, `journal-80.txt`, `journal-long.txt`). Вставьте содержимое
+любого файла в поле на сайте и нажмите «Import Journal». Также можно нажать
+**Try Demo Journal** — демо-код проходит через тот же многочастный конвейер импорта.
+
+## Проверка печатной версии (настоящий PDF)
+
+```bash
+npm run build && npm run preview -- --port 4173 --host 127.0.0.1   # в одном терминале
+node scripts/print-pdf-check.mjs                                   # в другом: 4 PDF в docs/pdf-samples/
+python -m pip install pypdf && python scripts/verify_pdfs.py       # проверка страниц/глав/текста
+```
 
 ## Архитектура
 

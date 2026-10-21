@@ -1,9 +1,14 @@
 import type { Lang } from '../i18n'
+import { MAX_DATE_MS, MIN_DATE_MS } from './journal'
 
 const locales: Record<Lang, string> = { en: 'en-US', ru: 'ru-RU' }
 
+function isValidDateMs(ms: number): boolean {
+  return Number.isFinite(ms) && ms >= MIN_DATE_MS && ms <= MAX_DATE_MS
+}
+
 export function formatDate(ms: number | undefined, lang: Lang): string {
-  if (!ms) return ''
+  if (!ms || !isValidDateMs(ms)) return ''
   return new Intl.DateTimeFormat(locales[lang], {
     day: 'numeric',
     month: 'long',
@@ -17,6 +22,7 @@ export function monthKey(ms: number): string {
 }
 
 export function monthLabel(ms: number, lang: Lang): string {
+  if (!isValidDateMs(ms)) return ''
   return new Intl.DateTimeFormat(locales[lang], { month: 'long', year: 'numeric' }).format(ms)
 }
 

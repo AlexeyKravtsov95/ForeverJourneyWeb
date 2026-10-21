@@ -441,6 +441,9 @@
     border-radius: 0;
     box-shadow: none;
     border-color: transparent;
+    /* each printed fragment of an overflowing sheet keeps padding, border and background */
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
     break-after: page;
     page-break-after: always;
   }

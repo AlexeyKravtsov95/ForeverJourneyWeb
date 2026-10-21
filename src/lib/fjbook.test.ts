@@ -10,7 +10,7 @@ const cyrillicJournal: Journal = {
   formatVersion: 1,
   addonVersion: '1.2.3',
   locale: 'ruRU',
-  exportedAt: '2026-10-01T10:00:00Z',
+  exportedAt: Date.UTC(2026, 9, 1, 10, 0),
   character: { name: 'Громозека', race: 'Орк', class: 'Воин', level: 60 },
   journey: {
     startedAt: Date.UTC(2026, 1, 1, 8, 0),
@@ -103,6 +103,98 @@ describe('importJournal — happy paths', () => {
       checksumStyle: 'hex',
     })
     expect(importJournal(code).status).toBe('ok')
+  })
+
+  it('accepts an uppercase hex checksum from a single-part export (JournalExport.lua %08X)', () => {
+    const code = encodeJournalCode(cyrillicJournal, {
+      partSize: 10_000,
+      checksumStyle: 'hex-upper',
+    })
+    const result = importJournal(code)
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      expect(result.journal.character.name).toBe('Громозека')
+      expect(result.meta.parts).toBe(1)
+    }
+  })
+
+  it('accepts an uppercase hex checksum from a multi-part export', () => {
+    const parts = encodeJournalParts(cyrillicJournal, {
+      partSize: 150,
+      checksumStyle: 'hex-upper',
+    })
+    expect(parts[0]).toMatch(/FJBOOK1:1\/\d+:([0-9A-F]{8}):/)
+    const result = importJournal(parts.join('\n'))
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') expect(result.meta.parts).toBe(parts.length)
+  })
+
+  it('accepts a Lua-style journal with Unix-second timestamps and exportedAt', () => {
+    const luaStyle = {
+      ...cyrillicJournal,
+      exportedAt: 1_770_000_000,
+      journey: { ...cyrillicJournal.journey, startedAt: 1_769_900_000 },
+      memories: cyrillicJournal.memories.map((memory) => ({
+        ...memory,
+        timestamp: Math.floor((memory.timestamp as number) / 1000),
+      })),
+    }
+    const result = importJournal(
+      encodeJournalCode(luaStyle, { partSize: 240, checksumStyle: 'hex-upper' })
+    )
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      expect(result.journal.exportedAt).toBe(1_770_000_000_000)
+      expect(result.journal.journey.startedAt).toBe(1_769_900_000_000)
+      expect(result.journal.memories[0].timestamp).toBe(
+        Math.floor((cyrillicJournal.memories[0].timestamp as number) / 1000) * 1000
+      )
+    }
+  })
+
+  it('ignores Unicode whitespace and zero-width characters injected by chat copy-paste', () => {
+    const parts = encodeJournalParts(cyrillicJournal, {
+      partSize: 150,
+      checksumStyle: 'hex-upper',
+    })
+    const dirtyInsideData =
+      parts[0].slice(0, 60) + '\u00A0' + parts[0].slice(60)
+    const dirty =
+      '\uFEFF' + [dirtyInsideData, ...parts.slice(1)].join('\u3000\n\u200B') + '\u00A0'
+    expect(importJournal(dirty).status).toBe('ok')
+  })
+
+  it('joins block payloads hard-wrapped by chat clients', () => {
+    const parts = encodeJournalParts(cyrillicJournal, {
+      partSize: 150,
+      checksumStyle: 'hex-upper',
+    })
+    const wrapped = parts.map((block) => (block.match(/.{1,64}/g) || []).join('\n')).join('\n')
+    expect(importJournal(wrapped).status).toBe('ok')
+  })
+
+  it('rejects a block whose payload was tampered with', () => {
+    const code = encodeJournalCode(cyrillicJournal, {
+      partSize: 10_000,
+      checksumStyle: 'hex-upper',
+    })
+    const match = code.match(/^(FJBOOK1:1\/1:[0-9A-Fa-f]+:)([A-Za-z0-9+/]+)(=*)$/)
+    const flipped = match![2].slice(0, -1) + (match![2].endsWith('A') ? 'B' : 'A')
+    expect(importJournal(match![1] + flipped + match![3])).toMatchObject({
+      status: 'error',
+      code: 'CHECKSUM_MISMATCH',
+    })
+  })
+
+  it('rejects non-ASCII characters injected into the payload', () => {
+    const code = encodeJournalCode(cyrillicJournal, { partSize: 10_000 })
+    const cut = code.lastIndexOf(':') + 40
+    const dirty = code.slice(0, cut) + 'Ж' + code.slice(cut)
+    const result = importJournal(dirty)
+    expect(result.status).toBe('error')
+    if (result.status === 'error') {
+      expect(['CHECKSUM_MISMATCH', 'INVALID_BASE64']).toContain(result.code)
+    }
   })
 
   it('accepts per-part independently encoded payloads', () => {

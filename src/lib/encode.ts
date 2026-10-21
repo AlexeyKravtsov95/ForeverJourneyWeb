@@ -3,7 +3,7 @@ import { bytesToBase64, encodeUtf8 } from './base64'
 
 export interface EncodeOptions {
   partSize?: number
-  checksumStyle?: 'decimal' | 'hex'
+  checksumStyle?: 'decimal' | 'hex' | 'hex-upper'
 }
 
 export const DEFAULT_PART_SIZE = 180
@@ -19,7 +19,9 @@ export function encodeJournalParts(journal: unknown, options: EncodeOptions = {}
   const checksumText =
     options.checksumStyle === 'hex'
       ? checksum.toString(16).padStart(8, '0')
-      : String(checksum)
+      : options.checksumStyle === 'hex-upper'
+        ? checksum.toString(16).padStart(8, '0').toUpperCase()
+        : String(checksum)
   const base64 = bytesToBase64(bytes)
   const total = Math.max(1, Math.ceil(base64.length / partSize))
   const blocks: string[] = []

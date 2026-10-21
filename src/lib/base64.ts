@@ -21,16 +21,25 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return out
 }
 
+const SKIP_CODES = new Set([
+  0x20, 0x09, 0x0a, 0x0d, 0x85, 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff,
+])
+
+function isSkippable(code: number): boolean {
+  return SKIP_CODES.has(code) || (code >= 0x2000 && code <= 0x200f)
+}
+
 /**
- * Lenient Base64 decoder: skips ASCII whitespace and accepts missing padding.
- * Returns null for any invalid character, misplaced '=' or impossible length.
+ * Lenient Base64 decoder: skips ASCII/Unicode whitespace and BOM-like characters
+ * and accepts missing padding. Returns null for any invalid character,
+ * misplaced '=' or impossible length.
  */
 export function base64ToBytes(input: string): Uint8Array | null {
   const src = new Uint8Array(input.length)
   let n = 0
   for (let i = 0; i < input.length; i++) {
     const code = input.charCodeAt(i)
-    if (code === 32 || code === 9 || code === 10 || code === 13) continue
+    if (isSkippable(code)) continue
     src[n++] = code
   }
 

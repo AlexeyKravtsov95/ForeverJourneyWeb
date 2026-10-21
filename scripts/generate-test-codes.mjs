@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Reference FJBOOK1 exporter for manual testing — an independent implementation
-// of the format described in FJ-WEB-01, mirroring what the addon will produce.
+// of the format described in FJ-WEB-01, mirroring the real addon exporter
+// (JournalExport.lua): checksum via string.format("%08X", b * 65536 + a),
+// Unix-second timestamps, base64 string sliced into chat-sized parts.
 // Usage: npm run generate:codes  → fixtures/*.txt to paste into the site.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -20,12 +22,13 @@ function adler32(buf) {
   return ((b << 16) | a) >>> 0
 }
 
+const sumUpper = (buf) => adler32(buf).toString(16).padStart(8, '0').toUpperCase()
+
 function encode(journal, { partSize = 180, checksumStyle = 'decimal', dropPart = null, corruptChecksum = false } = {}) {
   const json = JSON.stringify(journal)
   const bytes = Buffer.from(json, 'utf8')
-  let checksum = adler32(bytes)
-  if (corruptChecksum) checksum = (checksum + 1) >>> 0
-  const sum = checksumStyle === 'hex' ? checksum.toString(16).padStart(8, '0') : String(checksum)
+  let sum = checksumStyle === 'upper' ? sumUpper(bytes) : String(adler32(bytes))
+  if (corruptChecksum) sum = (parseInt(sum, 16) + 1).toString(16).padStart(8, '0').toUpperCase()
   const b64 = bytes.toString('base64')
   const total = Math.max(1, Math.ceil(b64.length / partSize))
   const parts = []
@@ -33,6 +36,27 @@ function encode(journal, { partSize = 180, checksumStyle = 'decimal', dropPart =
     parts.push(`FJBOOK1:${i + 1}/${total}:${sum}:${b64.slice(i * partSize, (i + 1) * partSize)}`)
   }
   if (dropPart) parts.splice(dropPart - 1, 1)
+  return parts.join('\n')
+}
+
+// Mirrors JournalExport.lua exactly: uppercase %08X checksum, base64 string slicing.
+function encodeLua(journal, { partSize = 240, perPart = false } = {}) {
+  const bytes = Buffer.from(JSON.stringify(journal), 'utf8')
+  const sum = sumUpper(bytes)
+  const parts = []
+  if (!perPart) {
+    const b64 = bytes.toString('base64')
+    const total = Math.max(1, Math.ceil(b64.length / partSize))
+    for (let i = 0; i < total; i++) {
+      parts.push(`FJBOOK1:${i + 1}/${total}:${sum}:${b64.slice(i * partSize, (i + 1) * partSize)}`)
+    }
+  } else {
+    const total = Math.ceil(bytes.length / partSize)
+    for (let i = 0; i < total; i++) {
+      const chunk = bytes.slice(i * partSize, (i + 1) * partSize)
+      parts.push(`FJBOOK1:${i + 1}/${total}:${sum}:${Buffer.from(chunk).toString('base64')}`)
+    }
+  }
   return parts.join('\n')
 }
 
@@ -69,33 +93,91 @@ const ru = {
   ],
 }
 
+// Lua-parity journal: every timestamp (including exportedAt) is Unix seconds,
+// as the real addon emits them.
+const luaStyle = {
+  format: 'FJJOURNAL',
+  formatVersion: 1,
+  addonVersion: '1.0.0',
+  locale: 'ruRU',
+  exportedAt: 1792850000,
+  character: { name: 'Траллина', race: 'Орк', class: 'Шаман', level: 55 },
+  journey: { startedAt: 1790000000, deaths: 9, completedQuests: 301, totalPlayed: 403200 },
+  memories: [
+    { type: 'zone', typeLabel: 'Зона открыта', source: 'zone', title: 'Дуротар', description: 'Красная земля и вечный ветер.', personalNote: '', favorite: false, timestamp: 1790003600, location: 'Дуротар' },
+    { type: 'note', typeLabel: 'Запись в дневнике', source: 'manual', title: 'Громовой утёс', description: 'Лифты работают. Пока.', personalNote: 'Не стоять под лифтом. Никогда.', favorite: true, timestamp: 1790173600, location: 'Громовой Утёс' },
+    { type: 'death', typeLabel: 'Смерть', source: 'death', title: 'Кабан', description: 'Траллина пала от кабана.', personalNote: '', favorite: false, timestamp: 1790300000, location: 'Степи' },
+    { type: 'achievement', typeLabel: 'Достижение', source: 'achievement', title: 'Исследователь Дуротара', description: 'Открыты все уголки Дуротара.', personalNote: '', favorite: false, timestamp: 1790600000, location: 'Дуротар' },
+  ],
+}
+
 const empty = { ...en, memories: [] }
 
-const large = {
-  ...en,
-  character: { ...en.character, name: 'Marathon' },
-  memories: Array.from({ length: 80 }, (_, i) => ({
-    type: i % 4 === 0 ? 'zone' : i % 4 === 1 ? 'achievement' : i % 4 === 2 ? 'death' : 'note',
-    typeLabel: 'Memory',
-    source: 'test',
-    title: `Память №${i + 1}`,
-    description: `Длинное описание события №${i + 1} для проверки больших журналов.`,
-    personalNote: i % 3 === 0 ? `Заметка к событию №${i + 1}` : '',
-    favorite: i % 10 === 0,
-    timestamp: 1767200000 + i * 3 * 86400,
-    location: 'Азерот',
-  })),
+function bigJournal(count, name) {
+  const types = ['zone', 'note', 'achievement', 'death', 'level']
+  const labels = { zone: 'Зона открыта', note: 'Запись в дневнике', achievement: 'Достижение', death: 'Смерть', level: 'Уровень' }
+  return {
+    format: 'FJJOURNAL',
+    formatVersion: 1,
+    addonVersion: '1.0.0',
+    locale: 'ruRU',
+    exportedAt: 1792850000,
+    character: { name, race: 'Эльф крови', class: 'Маг', level: 80 },
+    journey: { startedAt: 1767225600, deaths: Math.floor(count / 8), completedQuests: count * 7, totalPlayed: count * 7200 },
+    memories: Array.from({ length: count }, (_, i) => ({
+      type: types[i % 5],
+      typeLabel: labels[types[i % 5]],
+      source: types[i % 5],
+      title: `Память №${i + 1}: дорога ${['через лес', 'вдоль моря', 'сквозь туман', 'к вершине', 'домой'][i % 5]}`,
+      description:
+        i % 3 === 0
+          ? `Хроника дня ${i + 1}. Дорога шла через ${['ельник', 'пустошь', 'перевал', 'тростники'][i % 4]}, и к вечеру ${name} добрался до лагеря. Костёр, котелок и звёзды над головой — вот и всё богатство путника.`
+          : `Короткая запись дня ${i + 1}.`,
+      personalNote: i % 5 === 0 ? `Заметка к памяти №${i + 1}: не забыть вернуться сюда весной.` : '',
+      favorite: i % 11 === 0,
+      timestamp: 1767225600 + i * 3 * 86400,
+      location: ['Кель\'Талас', 'Лордерон', 'Тирисфаль', 'Серебряный Бор'][i % 4],
+    })),
+  }
+}
+
+const LONG_PARAGRAPH =
+  'Мы шли вдоль обрыва третий день, и море внизу так и не сменило цвет — всё тот же тяжёлый свинец. ' +
+  'Илан рассказывал про южные порты, где рыбу продают ещё живой, а чайки дерутся с детьми за корку хлеба. ' +
+  'Я слушал вполуха и считал шаги: на восьмисотом шаге тропа сужалась, и коня приходилось вести под уздцы. ' +
+  'К вечеру ветра стихали, и тогда становилось слышно, как под скалой ворочаются камни — море никогда не спит по-настоящему.'
+
+const longJournal = {
+  format: 'FJJOURNAL',
+  formatVersion: 1,
+  addonVersion: '1.0.0',
+  locale: 'ruRU',
+  exportedAt: 1792850000,
+  character: { name: 'Летописец', race: 'Человек', class: 'Монах', level: 60 },
+  journey: { startedAt: 1790000000, deaths: 1, completedQuests: 90, totalPlayed: 120000 },
+  memories: [
+    { type: 'note', typeLabel: 'Запись в дневнике', source: 'manual', title: 'Дорога вдоль обрыва', description: Array.from({ length: 26 }, (_, i) => `${LONG_PARAGRAPH} (часть ${i + 1})`).join('\n\n'), personalNote: '', favorite: true, timestamp: 1790100000, location: 'Западный край' },
+    { type: 'zone', typeLabel: 'Зона открыта', source: 'zone', title: 'Сумеречный лес', description: 'Вороны считают путников.', personalNote: '', favorite: false, timestamp: 1790050000, location: 'Сумеречный лес' },
+    { type: 'note', typeLabel: 'Запись в дневнике', source: 'manual', title: 'Финальная страница', description: 'Дорога закончилась там же, где началась — у старого моста.', personalNote: '', favorite: false, timestamp: 1790200000, location: 'Штормград' },
+  ],
 }
 
 mkdirSync(OUT, { recursive: true })
 const files = {
   'sample-en.txt': encode(en, { partSize: 400 }),
   'sample-ru.txt': encode(ru, { partSize: 260 }),
-  'sample-large-80.txt': encode(large, { partSize: 1000 }),
+  'sample-large-80.txt': encode(bigJournal(80, 'Marathon'), { partSize: 1000 }),
   'sample-empty.txt': encode(empty),
-  'hex-checksum.txt': encode(en, { partSize: 500, checksumStyle: 'hex' }),
+  'hex-checksum.txt': encode(en, { partSize: 500, checksumStyle: 'decimal' }),
   'broken-checksum.txt': encode(en, { partSize: 500, corruptChecksum: true }),
   'missing-part.txt': encode(ru, { partSize: 250, dropPart: 2 }),
+  // Lua-parity fixtures (JournalExport.lua): uppercase %08X checksum + Unix seconds
+  'lua-style.txt': encodeLua(luaStyle, { partSize: 240 }),
+  'lua-style-perpart.txt': encodeLua(luaStyle, { partSize: 240, perPart: true }),
+  // journals for the PDF print check
+  'journal-59.txt': encodeLua(bigJournal(59, 'Полуночник'), { partSize: 240 }),
+  'journal-80.txt': encodeLua(bigJournal(80, 'Marathon'), { partSize: 240 }),
+  'journal-long.txt': encodeLua(longJournal, { partSize: 240 }),
 }
 
 for (const [name, content] of Object.entries(files)) {

@@ -56,15 +56,44 @@ interface Part {
 
 const BLOCK_RE = /FJBOOK1:(\d{1,4})\/(\d{1,4}):([0-9A-Fa-f]{1,10}):([A-Za-z0-9+/=]+)/g
 
+// Zero-width and Unicode whitespace characters that chat copy-paste can inject
+// between or inside blocks; they never occur in valid Base64 payloads.
+const IGNORABLE_CHARS = /[\u00A0\u1680\u2000-\u200F\u2028\u2029\u202F\u205F\u3000\uFEFF]/g
+
+const PURE_BASE64_LINE = /^[A-Za-z0-9+/=]+$/
+
+/**
+ * Strips ignorable Unicode characters, joins block payloads hard-wrapped by chat
+ * clients (pure Base64 continuation lines) and drops free-form junk between blocks.
+ */
+function normalizeInput(raw: string): string {
+  const cleaned = raw.replace(IGNORABLE_CHARS, '')
+  const lines: string[] = []
+  for (const rawLine of cleaned.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+    if (line.startsWith('FJBOOK1:')) {
+      lines.push(line)
+    } else if (
+      PURE_BASE64_LINE.test(line) &&
+      lines.length > 0 &&
+      lines[lines.length - 1].startsWith('FJBOOK1:')
+    ) {
+      lines[lines.length - 1] += line
+    }
+  }
+  return lines.join('\n')
+}
+
 /**
  * Imports a Forever Journey export: one or many `FJBOOK1:<part>/<total>:<checksum>:<base64>`
  * blocks pasted in any order. Verifies part completeness, duplicates, Adler-32 checksum,
  * format version and journal structure. All processing happens locally.
  */
 export function importJournal(raw: string): ImportResult {
-  const input = raw.trim()
-  if (!input) return { status: 'error', code: 'EMPTY_INPUT' }
-  if (input.length > MAX_INPUT_CHARS) return { status: 'error', code: 'TOO_LARGE' }
+  if (!raw.trim()) return { status: 'error', code: 'EMPTY_INPUT' }
+  if (raw.length > MAX_INPUT_CHARS) return { status: 'error', code: 'TOO_LARGE' }
+  const input = normalizeInput(raw)
 
   const matches = [...input.matchAll(BLOCK_RE)]
   if (matches.length === 0) return { status: 'error', code: 'NOT_FJBOOK1' }
@@ -150,13 +179,19 @@ export function importJournal(raw: string): ImportResult {
   }
 }
 
-/** The checksum may be written as decimal or as a hex string. */
+/**
+ * The addon exporter (JournalExport.lua) writes the checksum as
+ * `string.format("%08X", b * 65536 + a)` — uppercase hex. Lowercase hex
+ * (padded or not) and plain decimal are accepted for compatibility.
+ */
 function checksumMatches(bytes: Uint8Array, declared: string): boolean {
   const value = adler32(bytes)
+  const normalized = declared.trim().toLowerCase().replace(/^0x/, '')
+  const hex = value.toString(16)
   return (
-    declared === String(value) ||
-    declared === value.toString(16).padStart(8, '0') ||
-    declared === value.toString(16)
+    normalized === String(value) ||
+    normalized === hex.padStart(8, '0') ||
+    normalized === hex
   )
 }
 

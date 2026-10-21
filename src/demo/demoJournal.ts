@@ -6,7 +6,7 @@ export const demoJournal: Journal = {
   formatVersion: 1,
   addonVersion: '0.9.3',
   locale: 'enUS',
-  exportedAt: '2026-10-21T19:05:00Z',
+  exportedAt: Date.UTC(2026, 9, 21, 19, 5),
   character: {
     name: 'Aelirien',
     race: 'Night Elf',

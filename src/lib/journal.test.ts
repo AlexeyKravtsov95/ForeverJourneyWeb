@@ -21,6 +21,38 @@ describe('toTimestamp', () => {
     expect(toTimestamp('not a date')).toBeUndefined()
     expect(toTimestamp(null)).toBeUndefined()
   })
+
+  it('rejects values outside the ECMAScript date range (no RangeError downstream)', () => {
+    expect(toTimestamp(8_640_000_000_000_000)).toBe(8_640_000_000_000_000)
+    expect(toTimestamp(8_640_000_000_000_001)).toBeUndefined()
+    expect(toTimestamp(1e16)).toBeUndefined()
+    expect(toTimestamp(Number.MAX_SAFE_INTEGER)).toBeUndefined()
+    expect(toTimestamp('+300000-01-01T00:00:00Z')).toBeUndefined()
+  })
+})
+
+describe('exportedAt normalization', () => {
+  it('accepts Unix seconds, milliseconds and ISO strings', () => {
+    const seconds = validateJournal({ ...minimal, exportedAt: 1_770_000_000 })
+    expect(seconds.ok).toBe(true)
+    if (seconds.ok) expect(seconds.journal.exportedAt).toBe(1_770_000_000_000)
+
+    const millis = validateJournal({ ...minimal, exportedAt: 1_770_000_000_000 })
+    expect(millis.ok).toBe(true)
+    if (millis.ok) expect(millis.journal.exportedAt).toBe(1_770_000_000_000)
+
+    const iso = validateJournal({ ...minimal, exportedAt: '2026-10-02T12:00:00Z' })
+    expect(iso.ok).toBe(true)
+    if (iso.ok) expect(iso.journal.exportedAt).toBe(Date.UTC(2026, 9, 2, 12))
+  })
+
+  it('drops invalid or out-of-range exportedAt without failing the journal', () => {
+    for (const exportedAt of ['nope', -5, Number.NaN, 1e19, null]) {
+      const result = validateJournal({ ...minimal, exportedAt })
+      expect(result.ok).toBe(true)
+      if (result.ok) expect(result.journal.exportedAt).toBeUndefined()
+    }
+  })
 })
 
 describe('validateJournal', () => {

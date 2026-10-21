@@ -43,6 +43,21 @@ describe('base64 + utf-8', () => {
     expect(decodeUtf8(bytes!)).toBe('Stormwind')
   })
 
+  it('skips Unicode whitespace, zero-width chars and BOM inside the payload', () => {
+    const padded = bytesToBase64(encodeUtf8('Оргриммар'))
+    const dirty =
+      '\uFEFF' + padded.slice(0, 4) + '\u00A0' + padded.slice(4, 8) + '\u200B' + padded.slice(8)
+    const bytes = base64ToBytes(dirty)
+    expect(bytes).not.toBeNull()
+    expect(decodeUtf8(bytes!)).toBe('Оргриммар')
+  })
+
+  it('rejects non-ASCII characters in the payload', () => {
+    const padded = bytesToBase64(encodeUtf8('Оргриммар'))
+    const dirty = padded.slice(0, 4) + 'Ж' + padded.slice(4)
+    expect(base64ToBytes(dirty)).toBeNull()
+  })
+
   it('rejects invalid input', () => {
     expect(base64ToBytes('!!!!')).toBeNull()
     expect(base64ToBytes('AB=CD')).toBeNull()

@@ -1,5 +1,8 @@
 export const JOURNAL_FORMAT = 'FJJOURNAL'
 export const SUPPORTED_FORMAT_VERSION = 1
+// The addon imposes no documented per-export cap; the site caps rendering cost
+// at 10 000 entries, which the 5 MB decoded-payload limit (fjbook.ts) would not
+// reach with realistic entries anyway — the effective bound is the payload size.
 export const MAX_MEMORIES = 10_000
 export const MAX_STRING_LENGTH = 20_000
 
@@ -34,7 +37,7 @@ export interface Journal {
   formatVersion: 1
   addonVersion: string
   locale: string
-  exportedAt: string
+  exportedAt?: number
   character: JournalCharacter
   journey: JournalJourney
   memories: JournalMemory[]
@@ -54,17 +57,23 @@ function asCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
 }
 
+// The ECMAScript date range; values outside it throw RangeError in Intl formatting.
+export const MIN_DATE_MS = -8_640_000_000_000_000
+export const MAX_DATE_MS = 8_640_000_000_000_000
+
 /**
- * Accepts epoch seconds, epoch milliseconds or an ISO 8601 string
- * and normalizes it to epoch milliseconds.
+ * Accepts epoch seconds (the addon format), epoch milliseconds or an ISO 8601 string
+ * and normalizes it to epoch milliseconds, rejecting anything that would overflow
+ * the date range.
  */
 export function toTimestamp(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value > 1e12 ? Math.round(value) : Math.round(value * 1000)
+    const ms = value > 1e12 ? value : value * 1000
+    return ms >= MIN_DATE_MS && ms <= MAX_DATE_MS ? Math.round(ms) : undefined
   }
   if (typeof value === 'string' && value.trim() !== '') {
     const ms = Date.parse(value)
-    if (!Number.isNaN(ms)) return ms
+    return Number.isFinite(ms) && ms >= MIN_DATE_MS && ms <= MAX_DATE_MS ? ms : undefined
   }
   return undefined
 }
@@ -120,13 +129,14 @@ export function validateJournal(data: unknown): JournalValidation {
       ? (root.journey as Record<string, unknown>)
       : {}
   const startedAt = toTimestamp(journeyRecord.startedAt)
+  const exportedAt = toTimestamp(root.exportedAt)
 
   const journal: Journal = {
     format: 'FJJOURNAL',
     formatVersion: 1,
     addonVersion: asText(root.addonVersion),
     locale: asText(root.locale),
-    exportedAt: asText(root.exportedAt),
+    ...(exportedAt !== undefined ? { exportedAt } : {}),
     character: {
       name: asText(characterRecord.name).trim() || 'Unknown',
       race: asText(characterRecord.race),
