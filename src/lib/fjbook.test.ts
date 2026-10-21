@@ -1,0 +1,273 @@
+import { describe, expect, it } from 'vitest'
+import { adler32 } from './adler32'
+import { bytesToBase64, encodeUtf8 } from './base64'
+import { encodeJournalCode, encodeJournalParts } from './encode'
+import { importJournal } from './fjbook'
+import type { Journal } from './journal'
+
+const cyrillicJournal: Journal = {
+  format: 'FJJOURNAL',
+  formatVersion: 1,
+  addonVersion: '1.2.3',
+  locale: 'ruRU',
+  exportedAt: '2026-10-01T10:00:00Z',
+  character: { name: 'Громозека', race: 'Орк', class: 'Воин', level: 60 },
+  journey: {
+    startedAt: Date.UTC(2026, 1, 1, 8, 0),
+    deaths: 7,
+    completedQuests: 210,
+    totalPlayed: 250_000,
+  },
+  memories: [
+    {
+      type: 'note',
+      typeLabel: 'Запись',
+      source: 'manual',
+      title: 'Первая ночь в Дуротаре',
+      description: 'Ветер нёс пыль и запах костра, а небо было огромным.',
+      personalNote: 'Не забыть купить факелы.',
+      favorite: false,
+      timestamp: 1_770_000_000,
+      location: 'Дуротар',
+    },
+    {
+      type: 'achievement',
+      typeLabel: 'Достижение',
+      source: 'achievement',
+      title: 'Исследователь Дуротара',
+      description: 'Открыты все уголки Дуротара.',
+      personalNote: '',
+      favorite: true,
+      timestamp: 1_770_860_000,
+      location: 'Оргриммар',
+    },
+    {
+      type: 'death',
+      typeLabel: 'Смерть',
+      source: 'death',
+      title: 'Свален квилбором',
+      description: 'Громозека пал в бою у перекрёстка.',
+      personalNote: 'Больше никогда — без щита.',
+      favorite: false,
+      timestamp: 1_771_500_000,
+      location: 'Степи',
+    },
+  ],
+}
+
+function withChecksum(block: string, checksum: string): string {
+  return block.replace(/^(FJBOOK1:\d+\/\d+):[0-9A-Fa-f]+:(.+)$/, `$1:${checksum}:$2`)
+}
+
+function blockWithPayload(payload: string): string {
+  const bytes = encodeUtf8(payload)
+  return `FJBOOK1:1/1:${adler32(bytes)}:${bytesToBase64(bytes)}`
+}
+
+describe('importJournal — happy paths', () => {
+  it('imports a single-part export with Cyrillic text', () => {
+    const result = importJournal(encodeJournalCode(cyrillicJournal, { partSize: 10_000 }))
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      expect(result.meta.parts).toBe(1)
+      expect(result.journal.character.name).toBe('Громозека')
+      expect(result.journal.character.race).toBe('Орк')
+      expect(result.journal.memories).toHaveLength(3)
+      expect(result.journal.memories[0].title).toBe('Первая ночь в Дуротаре')
+      expect(result.journal.memories[0].personalNote).toBe('Не забыть купить факелы.')
+      expect(result.journal.memories[1].favorite).toBe(true)
+    }
+  })
+
+  it('imports a multi-part export pasted in any order with junk between blocks', () => {
+    const parts = encodeJournalParts(cyrillicJournal, { partSize: 120 })
+    expect(parts.length).toBeGreaterThan(3)
+    const pasted = [...parts].reverse().join('\nsome junk between parts\n')
+    const result = importJournal(pasted)
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      expect(result.meta.parts).toBe(parts.length)
+      expect(result.journal.character.name).toBe('Громозека')
+    }
+  })
+
+  it('ignores an exact duplicate part', () => {
+    const parts = encodeJournalParts(cyrillicJournal, { partSize: 150 })
+    const pasted = [...parts, parts[1]].join('\n')
+    expect(importJournal(pasted).status).toBe('ok')
+  })
+
+  it('accepts a hex checksum', () => {
+    const code = encodeJournalCode(cyrillicJournal, {
+      partSize: 10_000,
+      checksumStyle: 'hex',
+    })
+    expect(importJournal(code).status).toBe('ok')
+  })
+
+  it('accepts per-part independently encoded payloads', () => {
+    const bytes = encodeUtf8(JSON.stringify(cyrillicJournal))
+    const checksum = adler32(bytes)
+    const base64 = bytesToBase64(bytes)
+    const sliceLen = Math.ceil(base64.length / 3)
+    const chunks = [
+      base64.slice(0, sliceLen),
+      base64.slice(sliceLen, sliceLen * 2),
+      base64.slice(sliceLen * 2),
+    ]
+    const blocks = chunks
+      .map((chunk, index) => `FJBOOK1:${index + 1}/${chunks.length}:${checksum}:${chunk}`)
+      .join('\n')
+    const result = importJournal(blocks)
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') expect(result.journal.character.name).toBe('Громозека')
+  })
+
+  it('imports an empty journal', () => {
+    const empty = { ...cyrillicJournal, memories: [] }
+    const result = importJournal(encodeJournalCode(empty, { partSize: 10_000 }))
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') expect(result.journal.memories).toHaveLength(0)
+  })
+
+  it('imports a journal with 59+ memories spread across many parts and months', () => {
+    const memories = Array.from({ length: 80 }, (_, index) => ({
+      type: 'note',
+      typeLabel: 'Запись',
+      source: 'manual',
+      title: `Глава о дне ${index + 1}`,
+      description: `Описание дня ${index + 1}: пройдено много дорог.`,
+      personalNote: index % 5 === 0 ? `Заметка №${index + 1}` : '',
+      favorite: index % 9 === 0,
+      timestamp: Date.UTC(2026, 0, 1) + index * 3 * 86_400_000,
+      location: 'Калимдор',
+    }))
+    const big = { ...cyrillicJournal, memories }
+    const parts = encodeJournalParts(big, { partSize: 300 })
+    expect(parts.length).toBeGreaterThan(10)
+    const result = importJournal(parts.join('\n'))
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      expect(result.journal.memories).toHaveLength(80)
+      expect(result.journal.memories[0].title).toBe('Глава о дне 1')
+      expect(result.journal.memories[79].title).toBe('Глава о дне 80')
+    }
+  })
+})
+
+describe('importJournal — error paths', () => {
+  it('rejects empty and non-FJBOOK1 input', () => {
+    expect(importJournal('')).toMatchObject({ status: 'error', code: 'EMPTY_INPUT' })
+    expect(importJournal('   ')).toMatchObject({ status: 'error', code: 'EMPTY_INPUT' })
+    expect(importJournal('hello world')).toMatchObject({ status: 'error', code: 'NOT_FJBOOK1' })
+  })
+
+  it('reports missing parts instead of failing', () => {
+    const parts = encodeJournalParts(cyrillicJournal, { partSize: 150 })
+    const pasted = parts.filter((_, index) => index !== 1).join('\n')
+    const result = importJournal(pasted)
+    expect(result).toMatchObject({
+      status: 'needs-parts',
+      total: parts.length,
+      received: parts.length - 1,
+      missing: [2],
+    })
+  })
+
+  it('rejects a conflicting duplicate part', () => {
+    const parts = encodeJournalParts(cyrillicJournal, { partSize: 150 })
+    const pasted = [...parts, parts[1] + 'QQ'].join('\n')
+    expect(importJournal(pasted)).toMatchObject({
+      status: 'error',
+      code: 'DUPLICATE_PART',
+      part: 2,
+    })
+  })
+
+  it('rejects parts declaring different totals', () => {
+    const parts = encodeJournalParts(cyrillicJournal, { partSize: 150 })
+    const broken = parts[1].replace(/^(FJBOOK1:\d+)\/\d+/, '$1/99')
+    expect(importJournal(`${parts[0]}\n${broken}`)).toMatchObject({
+      status: 'error',
+      code: 'TOTAL_MISMATCH',
+    })
+  })
+
+  it('rejects parts carrying different checksums', () => {
+    const parts = encodeJournalParts(cyrillicJournal, { partSize: 150 })
+    const tampered = withChecksum(parts[1], '12345')
+    expect(importJournal(`${parts[0]}\n${tampered}`)).toMatchObject({
+      status: 'error',
+      code: 'CHECKSUM_PARTS_MISMATCH',
+    })
+  })
+
+  it('rejects a broken part header', () => {
+    expect(importJournal('FJBOOK1:3/2:123:AAAA')).toMatchObject({
+      status: 'error',
+      code: 'INVALID_PART_HEADER',
+    })
+  })
+
+  it('rejects corrupted base64', () => {
+    expect(importJournal('FJBOOK1:1/1:123:AAAAA')).toMatchObject({
+      status: 'error',
+      code: 'INVALID_BASE64',
+    })
+  })
+
+  it('rejects a checksum mismatch', () => {
+    const code = encodeJournalCode(cyrillicJournal, { partSize: 10_000 })
+    expect(importJournal(withChecksum(code, '12345'))).toMatchObject({
+      status: 'error',
+      code: 'CHECKSUM_MISMATCH',
+    })
+  })
+
+  it('rejects valid base64 that is not valid UTF-8', () => {
+    const bytes = new Uint8Array([0xff, 0xfe, 0xfd])
+    const block = `FJBOOK1:1/1:${adler32(bytes)}:${bytesToBase64(bytes)}`
+    expect(importJournal(block)).toMatchObject({ status: 'error', code: 'INVALID_UTF8' })
+  })
+
+  it('rejects valid base64 that is not JSON', () => {
+    expect(importJournal(blockWithPayload('this is not json at all'))).toMatchObject({
+      status: 'error',
+      code: 'INVALID_JSON',
+    })
+  })
+
+  it('rejects a wrong inner format', () => {
+    const payload = JSON.stringify({
+      format: 'OTHER',
+      formatVersion: 1,
+      character: { name: 'x' },
+      memories: [],
+    })
+    expect(importJournal(blockWithPayload(payload))).toMatchObject({
+      status: 'error',
+      code: 'WRONG_FORMAT',
+    })
+  })
+
+  it('rejects an unsupported inner version and reports it', () => {
+    const payload = JSON.stringify({
+      format: 'FJJOURNAL',
+      formatVersion: 99,
+      character: { name: 'x' },
+      memories: [],
+    })
+    expect(importJournal(blockWithPayload(payload))).toMatchObject({
+      status: 'error',
+      code: 'UNSUPPORTED_VERSION',
+      detail: '99',
+    })
+  })
+
+  it('rejects oversized input', () => {
+    expect(importJournal('a'.repeat(10_000_001))).toMatchObject({
+      status: 'error',
+      code: 'TOO_LARGE',
+    })
+  })
+})
