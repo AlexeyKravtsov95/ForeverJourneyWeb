@@ -1,0 +1,69 @@
+:root {
+  --leather-1: #241a12;
+  --leather-2: #16100a;
+  --parchment-1: #f3e6c3;
+  --parchment-2: #e9d5a6;
+  --parchment-3: #e4cd9c;
+  --ink: #3c2b15;
+  --ink-soft: #6d5637;
+  --gold: #c9a45c;
+  --gold-bright: #e0c184;
+  --gold-dim: #8a6a2f;
+  --font-serif: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, 'Times New Roman', serif;
+  --font-mono: 'Consolas', 'Menlo', 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-serif);
+  color: var(--ink);
+  background:
+    radial-gradient(1100px 520px at 50% -8%, rgba(158, 116, 58, 0.22), transparent 60%),
+    radial-gradient(800px 460px at 88% 108%, rgba(0, 0, 0, 0.55), transparent 62%),
+    radial-gradient(700px 420px at 6% 96%, rgba(120, 84, 40, 0.18), transparent 60%),
+    linear-gradient(168deg, var(--leather-1), var(--leather-2) 55%, #1b130c);
+  background-attachment: fixed;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+textarea {
+  font: inherit;
+}
+
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid rgba(201, 164, 92, 0.45);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.lang-switch__btn {
+  background: transparent;
+  border: 0;
+  color: var(--gold-bright);
+  padding: 0.32rem 0.7rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+.lang-switch__btn.is-active {
+  background: rgba(201, 164, 92, 0.22);
+  color: #f0dcae;
+}
+
+.lang-switch__btn:hover {
+  background: rgba(201, 164, 92, 0.12);
+}

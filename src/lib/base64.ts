@@ -1,0 +1,87 @@
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+const LOOKUP = new Int16Array(128).fill(-1)
+for (let i = 0; i < ALPHABET.length; i++) {
+  LOOKUP[ALPHABET.charCodeAt(i)] = i
+}
+
+/** Standard Base64 with padding, no platform dependencies. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let out = ''
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i]
+    const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0
+    const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0
+    const triple = (b0 << 16) | (b1 << 8) | b2
+    out += ALPHABET[(triple >> 18) & 63]
+    out += ALPHABET[(triple >> 12) & 63]
+    out += i + 1 < bytes.length ? ALPHABET[(triple >> 6) & 63] : '='
+    out += i + 2 < bytes.length ? ALPHABET[triple & 63] : '='
+  }
+  return out
+}
+
+const SKIP_CODES = new Set([
+  0x20, 0x09, 0x0a, 0x0d, 0x85, 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff,
+])
+
+function isSkippable(code: number): boolean {
+  return SKIP_CODES.has(code) || (code >= 0x2000 && code <= 0x200f)
+}
+
+/**
+ * Lenient Base64 decoder: skips ASCII/Unicode whitespace and BOM-like characters
+ * and accepts missing padding. Every character code is validated BEFORE it is
+ * stored, so non-ASCII codes (e.g. ő = U+0151 = 337) can never be truncated by
+ * the Uint8Array into a valid ASCII character. Returns null for any invalid
+ * character, misplaced '=' or impossible length.
+ */
+export function base64ToBytes(input: string): Uint8Array | null {
+  const src = new Uint8Array(input.length)
+  let n = 0
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i)
+    if (isSkippable(code)) continue
+    if (code !== 61 /* '=' */ && (code > 126 || LOOKUP[code] === -1)) return null
+    src[n++] = code
+  }
+
+  let padding = 0
+  for (let i = 0; i < n; i++) {
+    if (src[i] === 61 /* '=' */) {
+      if (i < n - 2) return null
+      padding++
+    }
+  }
+
+  const dataLen = n - padding
+  if (dataLen <= 0 || dataLen % 4 === 1) return null
+
+  const outLength =
+    Math.floor(dataLen / 4) * 3 + (dataLen % 4 === 2 ? 1 : dataLen % 4 === 3 ? 2 : 0)
+  const out = new Uint8Array(outLength)
+  let o = 0
+  let buffer = 0
+  let bits = 0
+  for (let i = 0; i < dataLen; i++) {
+    buffer = (buffer << 6) | LOOKUP[src[i]]
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      out[o++] = (buffer >> bits) & 0xff
+    }
+  }
+  return out
+}
+
+const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
+const utf8Encoder = new TextEncoder()
+
+export function encodeUtf8(text: string): Uint8Array {
+  return utf8Encoder.encode(text)
+}
+
+/** Throws TypeError on invalid UTF-8 sequences. */
+export function decodeUtf8(bytes: Uint8Array): string {
+  return utf8Decoder.decode(bytes)
+}
