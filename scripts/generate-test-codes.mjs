@@ -60,6 +60,30 @@ function encodeLua(journal, { partSize = 240, perPart = false } = {}) {
   return parts.join('\n')
 }
 
+// The real exporter splits the base64 string into a first block of 30000 chars
+// and subsequent blocks of 12000 chars.
+function encodeLuaReal(journal) {
+  const bytes = Buffer.from(JSON.stringify(journal), 'utf8')
+  const sum = sumUpper(bytes)
+  const b64 = bytes.toString('base64')
+  const sizes = []
+  if (b64.length > 0) {
+    sizes.push(Math.min(30000, b64.length))
+    let rest = b64.length - 30000
+    while (rest > 0) {
+      sizes.push(Math.min(12000, rest))
+      rest -= 12000
+    }
+  }
+  const parts = []
+  let offset = 0
+  sizes.forEach((size, i) => {
+    parts.push(`FJBOOK1:${i + 1}/${sizes.length}:${sum}:${b64.slice(offset, offset + size)}`)
+    offset += size
+  })
+  return parts.join('\n')
+}
+
 const en = {
   format: 'FJJOURNAL',
   formatVersion: 1,
@@ -133,10 +157,10 @@ function bigJournal(count, name) {
         i % 3 === 0
           ? `Хроника дня ${i + 1}. Дорога шла через ${['ельник', 'пустошь', 'перевал', 'тростники'][i % 4]}, и к вечеру ${name} добрался до лагеря. Костёр, котелок и звёзды над головой — вот и всё богатство путника.`
           : `Короткая запись дня ${i + 1}.`,
-      personalNote: i % 5 === 0 ? `Заметка к памяти №${i + 1}: не забыть вернуться сюда весной.` : '',
+      personalNote: i % 5 === 0 ? `Заметка к памяти №${i + 1}: не забыть вернуться сюда весной.` : null,
       favorite: i % 11 === 0,
       timestamp: 1767225600 + i * 3 * 86400,
-      location: ['Кель\'Талас', 'Лордерон', 'Тирисфаль', 'Серебряный Бор'][i % 4],
+      location: i % 7 === 3 ? null : ['Кель\'Талас', 'Лордерон', 'Тирисфаль', 'Серебряный Бор'][i % 4],
     })),
   }
 }
@@ -174,6 +198,8 @@ const files = {
   // Lua-parity fixtures (JournalExport.lua): uppercase %08X checksum + Unix seconds
   'lua-style.txt': encodeLua(luaStyle, { partSize: 240 }),
   'lua-style-perpart.txt': encodeLua(luaStyle, { partSize: 240, perPart: true }),
+  // real exporter block split (30000 first, 12000 after) with null fields
+  'lua-style-30000.txt': encodeLuaReal(bigJournal(80, 'Спринтер')),
   // journals for the PDF print check
   'journal-59.txt': encodeLua(bigJournal(59, 'Полуночник'), { partSize: 240 }),
   'journal-80.txt': encodeLua(bigJournal(80, 'Marathon'), { partSize: 240 }),

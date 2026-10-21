@@ -4,7 +4,8 @@ import { validateJournal, type Journal, type JournalErrorCode } from './journal'
 
 export const MAX_INPUT_CHARS = 10_000_000
 export const MAX_PARTS = 512
-export const MAX_DECODED_BYTES = 5_000_000
+// JournalExport.lua MAX_BYTES = 3 * 1024 * 1024 — the addon never emits more
+export const MAX_DECODED_BYTES = 3 * 1024 * 1024
 
 export type ImportErrorCode =
   | 'EMPTY_INPUT'

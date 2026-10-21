@@ -118,8 +118,8 @@ describe('validateJournal', () => {
     }
   })
 
-  it('rejects more than MAX_MEMORIES entries', () => {
-    const memories = Array.from({ length: 10_001 }, () => ({ type: 'note' }))
+  it('rejects more than MAX_MEMORIES entries (JournalExport.lua MAX_ENTRIES = 20000)', () => {
+    const memories = Array.from({ length: 20_001 }, () => ({ type: 'note' }))
     expect(validateJournal({ ...minimal, memories })).toMatchObject({
       ok: false,
       code: 'INVALID_SCHEMA',

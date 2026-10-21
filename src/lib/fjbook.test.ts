@@ -363,3 +363,124 @@ describe('importJournal — error paths', () => {
     })
   })
 })
+
+describe('JournalExport.lua parity (MAX_ENTRIES / MAX_BYTES / block split / null fields)', () => {
+  function shortMemory(index: number) {
+    return {
+      type: 'note',
+      typeLabel: 'Запись',
+      source: 'manual',
+      title: `Д${index}`,
+      description: 'т',
+      personalNote: null,
+      favorite: null,
+      timestamp: 1_790_000_000 + index,
+      location: null,
+    }
+  }
+
+  it('imports a journal with more than 10 000 short entries (12 000)', () => {
+    const journal = {
+      ...cyrillicJournal,
+      memories: Array.from({ length: 12_000 }, (_, index) => shortMemory(index)),
+    }
+    const blocks = encodeJournalParts(journal, { partSize: 30_000, checksumStyle: 'hex-upper' })
+    expect(blocks.length).toBeGreaterThan(1)
+    const result = importJournal(blocks.join('\n'))
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      expect(result.journal.memories).toHaveLength(12_000)
+      expect(result.journal.memories[11_999].title).toBe('Д11999')
+    }
+  })
+
+  it('imports the real exporter block split: first block 30000 chars, then 12000 each', () => {
+    const journal = {
+      ...cyrillicJournal,
+      memories: Array.from({ length: 12_000 }, (_, index) => shortMemory(index)),
+    }
+    const bytes = encodeUtf8(JSON.stringify(journal))
+    const checksum = adler32(bytes).toString(16).padStart(8, '0').toUpperCase()
+    const base64 = bytesToBase64(bytes)
+    const sizes: number[] = [Math.min(30_000, base64.length)]
+    let rest = base64.length - 30_000
+    while (rest > 0) {
+      sizes.push(Math.min(12_000, rest))
+      rest -= 12_000
+    }
+    const blocks: string[] = []
+    let offset = 0
+    sizes.forEach((size, index) => {
+      blocks.push(`FJBOOK1:${index + 1}/${sizes.length}:${checksum}:${base64.slice(offset, offset + size)}`)
+      offset += size
+    })
+    expect(blocks.length).toBeGreaterThan(2)
+    const result = importJournal(blocks.join('\n'))
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') expect(result.meta.parts).toBe(blocks.length)
+  })
+
+  it('normalizes the null fields the Lua exporter emits for empty values', () => {
+    const journal = {
+      format: 'FJJOURNAL',
+      formatVersion: 1,
+      addonVersion: '1.0.0',
+      locale: 'ruRU',
+      exportedAt: null,
+      character: { name: 'Ннул', race: null, class: 'Разбойник', level: 12 },
+      journey: { startedAt: null, deaths: null, completedQuests: 5, totalPlayed: null },
+      memories: [
+        {
+          type: 'note',
+          typeLabel: null,
+          source: null,
+          title: null,
+          description: 'Текст',
+          personalNote: null,
+          favorite: null,
+          timestamp: null,
+          location: null,
+        },
+        {
+          type: 'zone',
+          typeLabel: 'Зона открыта',
+          source: 'zone',
+          title: 'Дуротар',
+          description: null,
+          personalNote: null,
+          favorite: true,
+          timestamp: 1_790_003_600,
+          location: 'Дуротар',
+        },
+      ],
+    }
+    const result = importJournal(
+      encodeJournalCode(journal, { partSize: 30_000, checksumStyle: 'hex-upper' })
+    )
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      const journal2 = result.journal
+      expect(journal2.exportedAt).toBeUndefined()
+      expect(journal2.character.race).toBe('')
+      expect(journal2.journey.startedAt).toBeUndefined()
+      expect(journal2.journey.deaths).toBe(0)
+      expect(journal2.journey.totalPlayed).toBe(0)
+      expect(journal2.memories[0].typeLabel).toBe('')
+      expect(journal2.memories[0].type).toBe('note')
+      expect(journal2.memories[0].timestamp).toBeUndefined()
+      expect(journal2.memories[0].location).toBe('')
+      expect(journal2.memories[1].timestamp).toBe(1_790_003_600_000)
+    }
+  })
+
+  it('still rejects journals above MAX_ENTRIES (20 001 entries)', () => {
+    const journal = {
+      ...cyrillicJournal,
+      memories: Array.from({ length: 20_001 }, (_, index) => ({ type: 'n', title: String(index) })),
+    }
+    const result = importJournal(
+      encodeJournalCode(journal, { partSize: 30_000, checksumStyle: 'hex-upper' })
+    )
+    expect(result).toMatchObject({ status: 'error', code: 'INVALID_SCHEMA' })
+  })
+})

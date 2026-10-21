@@ -31,8 +31,10 @@ function isSkippable(code: number): boolean {
 
 /**
  * Lenient Base64 decoder: skips ASCII/Unicode whitespace and BOM-like characters
- * and accepts missing padding. Returns null for any invalid character,
- * misplaced '=' or impossible length.
+ * and accepts missing padding. Every character code is validated BEFORE it is
+ * stored, so non-ASCII codes (e.g. ő = U+0151 = 337) can never be truncated by
+ * the Uint8Array into a valid ASCII character. Returns null for any invalid
+ * character, misplaced '=' or impossible length.
  */
 export function base64ToBytes(input: string): Uint8Array | null {
   const src = new Uint8Array(input.length)
@@ -40,17 +42,15 @@ export function base64ToBytes(input: string): Uint8Array | null {
   for (let i = 0; i < input.length; i++) {
     const code = input.charCodeAt(i)
     if (isSkippable(code)) continue
+    if (code !== 61 /* '=' */ && (code > 126 || LOOKUP[code] === -1)) return null
     src[n++] = code
   }
 
   let padding = 0
   for (let i = 0; i < n; i++) {
-    const code = src[i]
-    if (code === 61 /* '=' */) {
+    if (src[i] === 61 /* '=' */) {
       if (i < n - 2) return null
       padding++
-    } else if (code >= 128 || LOOKUP[code] === -1) {
-      return null
     }
   }
 

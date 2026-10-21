@@ -1,9 +1,8 @@
 export const JOURNAL_FORMAT = 'FJJOURNAL'
 export const SUPPORTED_FORMAT_VERSION = 1
-// The addon imposes no documented per-export cap; the site caps rendering cost
-// at 10 000 entries, which the 5 MB decoded-payload limit (fjbook.ts) would not
-// reach with realistic entries anyway — the effective bound is the payload size.
-export const MAX_MEMORIES = 10_000
+// JournalExport.lua caps exports at MAX_ENTRIES = 20000 memories and
+// MAX_BYTES = 3 MiB of JSON; the site accepts exactly the same entry cap.
+export const MAX_MEMORIES = 20_000
 export const MAX_STRING_LENGTH = 20_000
 
 export interface JournalCharacter {

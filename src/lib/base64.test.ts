@@ -58,6 +58,21 @@ describe('base64 + utf-8', () => {
     expect(base64ToBytes(dirty)).toBeNull()
   })
 
+  it('rejects U+0151 (ő) in place of ASCII Q — no byte-truncation into valid Base64 (regression)', () => {
+    // charCodeAt(U+0151) = 337 = 0x151; stored into a Uint8Array it would silently
+    // truncate to 0x51 = 'Q', turning a corrupted payload into a "valid" one
+    expect(0x151 & 0xff).toBe(0x51)
+    expect('Q'.charCodeAt(0)).toBe(0x51)
+    const dirty = '\u0151' + bytesToBase64(encodeUtf8('Azeroth')).slice(1)
+    expect(base64ToBytes(dirty)).toBeNull()
+  })
+
+  it('rejects codes above 255 that would wrap into valid ASCII (e.g. U+0141 = 321 → "A")', () => {
+    expect(0x141 & 0xff).toBe(0x41)
+    const dirty = '\u0141'.repeat(4)
+    expect(base64ToBytes(dirty)).toBeNull()
+  })
+
   it('rejects invalid input', () => {
     expect(base64ToBytes('!!!!')).toBeNull()
     expect(base64ToBytes('AB=CD')).toBeNull()
