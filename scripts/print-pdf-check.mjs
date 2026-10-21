@@ -5,7 +5,8 @@
 // Usage: node scripts/print-pdf-check.mjs [baseUrl]   (default http://127.0.0.1:4173/)
 import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -14,6 +15,8 @@ const BASE_URL = process.argv[2] || 'http://127.0.0.1:4173/'
 const CHROME =
   process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9333
+// Chrome profile lives in the OS temp dir, never inside the repository
+const CHROME_PROFILE = join(tmpdir(), `fj-chrome-${Date.now()}`)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 mkdirSync(OUT, { recursive: true })
@@ -23,7 +26,7 @@ const chrome = spawn(
   [
     '--headless=new',
     `--remote-debugging-port=${PORT}`,
-    `--user-data-dir=${resolve(ROOT, '.chrome-tmp')}`,
+    `--user-data-dir=${CHROME_PROFILE}`,
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-gpu',
@@ -168,5 +171,8 @@ try {
 } finally {
   try { ws.close() } catch {}
   chrome.kill()
-  try { rmSync(resolve(ROOT, '.chrome-tmp'), { recursive: true, force: true }) } catch {}
+  for (let i = 0; i < 5; i++) {
+    try { rmSync(CHROME_PROFILE, { recursive: true, force: true }); break } catch {}
+    await sleep(300)
+  }
 }
