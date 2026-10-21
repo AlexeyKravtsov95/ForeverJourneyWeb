@@ -1,0 +1,8 @@
+node_modules/
+dist/
+fixtures/
+.mimosa/
+*.local
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo
