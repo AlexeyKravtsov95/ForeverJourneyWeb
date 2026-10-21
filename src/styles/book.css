@@ -30,6 +30,45 @@
   background: rgba(201, 164, 92, 0.14);
 }
 
+.toolbar__btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.toolbar__btn--download {
+  background: rgba(201, 164, 92, 0.18);
+  font-weight: 600;
+}
+
+.toolbar__btn--download:hover:not(:disabled) {
+  background: rgba(201, 164, 92, 0.3);
+}
+
+.pdf-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1rem;
+  background: rgba(120, 40, 20, 0.85);
+  border-bottom: 1px solid rgba(201, 164, 92, 0.35);
+  color: #f2d9b0;
+  font-size: 0.85rem;
+}
+
+.pdf-error__retry {
+  background: transparent;
+  border: 1px solid rgba(240, 220, 174, 0.7);
+  color: #f0dcae;
+  border-radius: 4px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.pdf-error__retry:hover {
+  background: rgba(240, 220, 174, 0.15);
+}
+
 .toolbar__meta {
   font-size: 0.78rem;
   color: #9d8a63;

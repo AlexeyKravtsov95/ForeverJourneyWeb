@@ -30,6 +30,9 @@ export interface Strings {
   errors: Record<ImportErrorCode, string>
   toolbarBack: string
   toolbarPrint: string
+  toolbarDownload: string
+  toolbarDownloadBusy: string
+  pdfError: string
   importedMeta: string
   coverTitle: string
   levelN: string
@@ -97,7 +100,10 @@ export const strings: Record<Lang, Strings> = {
       INVALID_SCHEMA: 'The journal structure is damaged: {detail}.',
     },
     toolbarBack: 'New import',
-    toolbarPrint: 'Print / Save as PDF',
+    toolbarPrint: 'Print',
+    toolbarDownload: 'Download PDF',
+    toolbarDownloadBusy: 'Generating PDF…',
+    pdfError: 'Could not generate the PDF. Please try again.',
     importedMeta: 'Import verified · {parts} part(s) · Adler-32 OK',
     coverTitle: 'My Journey',
     levelN: 'Level {level}',
@@ -163,7 +169,10 @@ export const strings: Record<Lang, Strings> = {
       INVALID_SCHEMA: 'Структура журнала повреждена: {detail}.',
     },
     toolbarBack: 'Новый импорт',
-    toolbarPrint: 'Печать / Сохранить в PDF',
+    toolbarPrint: 'Печать',
+    toolbarDownload: 'Скачать PDF',
+    toolbarDownloadBusy: 'Создание PDF…',
+    pdfError: 'Не удалось создать PDF. Попробуйте ещё раз.',
     importedMeta: 'Импорт проверен · частей: {parts} · Adler-32 OK',
     coverTitle: 'Моё путешествие',
     levelN: 'Уровень {level}',
