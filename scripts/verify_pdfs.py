@@ -155,17 +155,27 @@ def main():
             "INSTANCE",
             "MEMORY",
             "QUEST MILESTONE",
+            "Discovered Dun Morogh",
+            "Fell in battle — Stonesplinter Trogg",
+            "Final blow: Pyroblast.",
+            "Reached Level 9",
+            "Entered Deadmines",
+            "quests completed",
+            "Another chapter of your journey lies within",
             "A new place became part of your journey",
             "The battle ended in victory",
+            "Your journey continues",
             "4d 22h",
             "Первая смерть — обидно",
         ),
         must_not_contain=("Путешествие Straider началось", "4 д 22 ч"),
     )
-    # Russian book: system events translated, Cyrillic extractable, single
-    # period after the year («г.» — not «г..»; the bare ".." needle is not
-    # usable because the font warm-up run's «…» extracts as "..."), localized
-    # time units, player text untouched.
+    # Russian book: system events translated (incl. parameterized templates —
+    # names inside them stay original), Cyrillic extractable, single period
+    # after the year («г.» — not «г..»; the bare ".." needle is not usable
+    # because the font warm-up run's «…» extracts as "..."), localized time
+    # units, authored text of manual notes and personal notes untouched —
+    # even when they look exactly like system templates.
     ok &= check(
         "client-localization-ru",
         min_pages=8,
@@ -179,19 +189,41 @@ def main():
             "ЭТАП ЗАДАНИЙ",
             "ДОСТИЖЕНИЕ",
             "ЗАПИСЬ В ДНЕВНИКЕ",
+            "Открыта зона: Dun Morogh",
+            "Пал в бою — Stonesplinter Trogg",
+            "Последний удар: Pyroblast.",
+            "Достигнут 9-й уровень",
+            "Достигнут уровень 9.",
+            "Вход в подземелье: Deadmines",
+            "Выполнено заданий: 50",
+            "Впереди новая глава твоего путешествия",
+            "Достигнут ещё один важный этап выполнения заданий",
             "Новое место стало частью твоего путешествия",
             "Битва завершилась победой",
             "На пути каждого героя случаются поражения",
-            "Достигнут уровень",
+            "Путешествие продолжается",
             "Путешествие Straider началось",
             "4 д 22 ч",
             "Первая смерть — обидно",
+            # authored text of the manual note (reviewer case) stays verbatim
+            "Level 20",
+            "Your journey continues",
+            "Notes from the road",
+            # unknown title templates stay original — by design
+            "Boss defeated",
         ),
         must_not_contain=(
             "г..",  # the «2026 г..» regression must not come back
             "Death",
             "Quest Milestone",
-            "A new place became part of your journey",
+            "Discovered ",
+            "Fell in battle",
+            "Final blow",
+            "Reached Level",
+            "Entered ",
+            "quests completed",
+            "Another chapter of your journey",
+            "A new place became part",
             "4d 22h",
         ),
     )

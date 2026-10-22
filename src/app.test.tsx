@@ -61,9 +61,11 @@ describe('rendering', () => {
     expect(html).toContain('Уровень 5')
     expect(html).toContain('Достигнут уровень 5.')
     expect(html).toContain('Достигнут максимальный уровень.')
-    // player-written text is never translated
+    // player-written text is never translated, even on system event types
     expect(html).toContain('Первое море')
     expect(html).toContain('The trees here lean away from the sea')
+    // authored titles of manual notes stay verbatim in the Russian book too
+    expect(html).toContain('Autumn in Duskwood')
     // localized time format and a single period after the Russian year
     // (the calendar day depends on the reader's timezone, so match any June day)
     expect(html).toContain('5 д 18 ч')

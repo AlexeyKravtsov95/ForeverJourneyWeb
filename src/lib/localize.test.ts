@@ -60,6 +60,14 @@ describe('localizeMemory — template text', () => {
     ['The battle ended in victory.', 'Битва завершилась победой.'],
     ['Every journey has its setbacks.', 'На пути каждого героя случаются поражения.'],
     ['Reached the level cap.', 'Достигнут максимальный уровень.'],
+    [
+      'Another chapter of your journey lies within.',
+      'Впереди новая глава твоего путешествия.',
+    ],
+    [
+      'Another important questing milestone has been reached.',
+      'Достигнут ещё один важный этап выполнения заданий.',
+    ],
   ])('translates the system description "%s"', (en, ru) => {
     expect(localizeMemory(memory({ description: en }), 'ru').description).toBe(ru)
   })
@@ -76,9 +84,66 @@ describe('localizeMemory — template text', () => {
     expect(view.description).toBe('Достигнут уровень 20.')
   })
 
+  it.each([1, 3, 11, 21, 80])('translates "Reached Level %i" with the correct ordinal', (level) => {
+    const entry = memory({ type: 'level', title: `Reached Level ${level}` })
+    expect(localizeMemory(entry, 'ru').title).toBe(`Достигнут ${level}-й уровень`)
+  })
+
+  it.each([
+    ['Discovered Dun Morogh', 'Открыта зона: Dun Morogh'],
+    ['Discovered Тирисфальские леса', 'Открыта зона: Тирисфальские леса'],
+    ['Fell in battle — Stonesplinter Trogg', 'Пал в бою — Stonesplinter Trogg'],
+    ['Entered Deadmines', 'Вход в подземелье: Deadmines'],
+    ['250 quests completed', 'Выполнено заданий: 250'],
+  ])('translates the parameterized system title "%s" keeping the name verbatim', (en, ru) => {
+    expect(localizeMemory(memory({ type: 'zone', title: en }), 'ru').title).toBe(ru)
+  })
+
+  it.each([
+    ['Final blow: Pyroblast.', 'Последний удар: Pyroblast.'],
+    ['Final blow: Огненный шар.', 'Последний удар: Огненный шар.'],
+  ])('translates the parameterized system description "%s"', (en, ru) => {
+    expect(localizeMemory(memory({ type: 'death', description: en }), 'ru').description).toBe(ru)
+  })
+
   it('does not touch partially custom titles', () => {
     const entry = memory({ type: 'level', title: 'Level 20: Guardian of the Grove' })
     expect(localizeMemory(entry, 'ru').title).toBe('Level 20: Guardian of the Grove')
+  })
+
+  it('keeps authored text of manual entries verbatim even when it looks like a template', () => {
+    // the reviewer's case: a manual note whose title/description happen to be
+    // exact system templates — authored text always wins
+    const manual = memory({
+      type: 'note',
+      typeLabel: 'Journal Entry',
+      source: 'manual',
+      title: 'Level 20',
+      description: 'Your journey continues.',
+    })
+    const view = localizeMemory(manual, 'ru')
+    expect(view.title).toBe('Level 20')
+    expect(view.description).toBe('Your journey continues.')
+    // the addon's own type label is still UI text and is translated
+    expect(view.typeLabel).toBe('Запись в дневнике')
+  })
+
+  it('detects manual entries by either type "note" or source "manual"', () => {
+    const byType = memory({ type: 'note', source: 'note', title: 'Reached Level 5' })
+    const bySource = memory({ type: 'story', source: 'manual', title: 'Discovered Dun Morogh' })
+    expect(localizeMemory(byType, 'ru').title).toBe('Reached Level 5')
+    expect(localizeMemory(bySource, 'ru').title).toBe('Discovered Dun Morogh')
+  })
+
+  it('keeps personal notes of automatic events verbatim', () => {
+    const entry = memory({
+      type: 'death',
+      title: 'Fell in battle — Stonesplinter Trogg',
+      personalNote: 'Обидно. revansch scheduled.',
+    })
+    const view = localizeMemory(entry, 'ru')
+    expect(view.title).toBe('Пал в бою — Stonesplinter Trogg')
+    expect(view.personalNote).toBe('Обидно. revansch scheduled.')
   })
 
   it('keeps custom descriptions verbatim in Russian', () => {

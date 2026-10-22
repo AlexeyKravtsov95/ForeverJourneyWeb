@@ -34,16 +34,31 @@ const DESCRIPTIONS_RU: Record<string, string> = {
   'The battle ended in victory.': 'Битва завершилась победой.',
   'Every journey has its setbacks.': 'На пути каждого героя случаются поражения.',
   'Reached the level cap.': 'Достигнут максимальный уровень.',
+  'Another chapter of your journey lies within.': 'Впереди новая глава твоего путешествия.',
+  'Another important questing milestone has been reached.':
+    'Достигнут ещё один важный этап выполнения заданий.',
 }
 
-/** Addon-generated titles with a number parameter, e.g. "Level 20". */
+/**
+ * Addon-generated titles with a parameter (zone/enemy/instance name, level or
+ * quest count). The captured parameter is player-facing world text (names of
+ * zones, NPCs, instances, spells) and is always preserved verbatim — only the
+ * template around it is translated.
+ */
 const TITLE_PATTERNS_RU: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
+  [/^Discovered (.+)$/, (m) => `Открыта зона: ${m[1]}`],
+  [/^Fell in battle — (.+)$/, (m) => `Пал в бою — ${m[1]}`],
+  // masculine ordinal is «-й» for every integer: 1-й, 3-й, 11-й, 21-й, 100-й
+  [/^Reached Level (\d+)$/, (m) => `Достигнут ${m[1]}-й уровень`],
+  [/^Entered (.+)$/, (m) => `Вход в подземелье: ${m[1]}`],
+  [/^(\d+) quests completed$/, (m) => `Выполнено заданий: ${m[1]}`],
   [/^Level (\d+)$/, (m) => `Уровень ${m[1]}`],
 ]
 
-/** Addon-generated descriptions with a number parameter, e.g. "Reached level 20." */
+/** Addon-generated descriptions with a parameter, e.g. "Final blow: Pyroblast." */
 const DESCRIPTION_PATTERNS_RU: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
   [/^Reached level (\d+)\.$/, (m) => `Достигнут уровень ${m[1]}.`],
+  [/^Final blow: (.+)\.$/, (m) => `Последний удар: ${m[1]}.`],
 ]
 
 function translateTypeLabel(label: string, lang: Lang): string {
@@ -51,8 +66,18 @@ function translateTypeLabel(label: string, lang: Lang): string {
   return TYPE_LABELS_RU[label.trim().toLowerCase()] ?? label
 }
 
-function translateTitle(title: string, lang: Lang): string {
-  if (lang !== 'ru') return title
+/**
+ * Manual (player-written) entries: their titles and descriptions are authored
+ * text and are never translated, whatever they contain. The addon marks them
+ * type "note" / source "manual" (JournalExport.lua; seen in every fixture).
+ * When an entry's origin is ambiguous, the original text always wins.
+ */
+function isManualEntry(memory: JournalMemory): boolean {
+  return memory.type === 'note' || memory.source === 'manual'
+}
+
+function translateTitle(title: string, memory: JournalMemory, lang: Lang): string {
+  if (lang !== 'ru' || isManualEntry(memory)) return title
   const trimmed = title.trim()
   for (const [pattern, translate] of TITLE_PATTERNS_RU) {
     const match = trimmed.match(pattern)
@@ -61,8 +86,8 @@ function translateTitle(title: string, lang: Lang): string {
   return title
 }
 
-function translateDescription(description: string, lang: Lang): string {
-  if (lang !== 'ru') return description
+function translateDescription(description: string, memory: JournalMemory, lang: Lang): string {
+  if (lang !== 'ru' || isManualEntry(memory)) return description
   const trimmed = description.trim()
   if (DESCRIPTIONS_RU[trimmed]) return DESCRIPTIONS_RU[trimmed]
   for (const [pattern, translate] of DESCRIPTION_PATTERNS_RU) {
@@ -86,8 +111,8 @@ export interface LocalizedMemory {
 export function localizeMemory(memory: JournalMemory, lang: Lang): LocalizedMemory {
   return {
     typeLabel: translateTypeLabel(memory.typeLabel, lang),
-    title: translateTitle(memory.title, lang),
-    description: translateDescription(memory.description, lang),
+    title: translateTitle(memory.title, memory, lang),
+    description: translateDescription(memory.description, memory, lang),
     personalNote: memory.personalNote,
     location: memory.location,
     meta: [formatDate(memory.timestamp, lang), memory.location.trim()]

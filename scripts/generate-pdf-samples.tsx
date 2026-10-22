@@ -36,11 +36,12 @@ function fixtureJournal(file: string): Journal {
 }
 
 // FJ-WEB-02.1 localization showcase: a Straider-style enUS journal with the
-// addon's system event templates (types, auto-generated titles and
-// descriptions). Rendered once in English and once in Russian, it shows the
-// RU book translating system events while keeping player text and zone names
-// in the original. Built here (not a fixture) on purpose: it is a rendering
-// sample, not an import-pipeline case.
+// real addon system templates (parameterized titles, auto descriptions) plus
+// authored manual notes. Rendered once in English and once in Russian, it
+// shows the RU book translating system events while keeping player text,
+// zone/NPC/spell names and unknown templates in the original. Built here
+// (not a fixture) on purpose: it is a rendering sample, not an
+// import-pipeline case.
 function buildStraiderJournal(): Journal {
   const zones = [
     'Dun Morogh',
@@ -50,6 +51,9 @@ function buildStraiderJournal(): Journal {
     'Stranglethorn Vale',
     'Burning Steppes',
   ]
+  const enemies = ['Stonesplinter Trogg', 'Murloc Nightcrawler', 'Blackrock Raider']
+  const spells = ['Pyroblast', 'Frostbolt', 'Fire Blast']
+  const instances = ['Deadmines', 'The Stockade', 'Shadowfang Keep']
   const day = (index: number) => Date.UTC(2026, 0, 2, 12) + index * 3 * 86_400_000
   const entry = (index: number, over: Partial<JournalMemory>): JournalMemory => ({
     type: 'memory',
@@ -66,6 +70,9 @@ function buildStraiderJournal(): Journal {
 
   const memories: JournalMemory[] = []
   let level = 8
+  let quests = 0
+  let deathCount = 0
+  let noteCount = 0
   for (let index = 0; index < 59; index++) {
     const zone = zones[index % zones.length]
     switch (index % 9) {
@@ -75,7 +82,7 @@ function buildStraiderJournal(): Journal {
             type: 'zone',
             typeLabel: 'Zone',
             source: 'zone',
-            title: zone,
+            title: `Discovered ${zone}`,
             description: 'A new place became part of your journey.',
           })
         )
@@ -87,24 +94,30 @@ function buildStraiderJournal(): Journal {
             type: 'level',
             typeLabel: 'Level Up',
             source: 'level',
-            title: `Level ${level}`,
+            title: `Reached Level ${level}`,
             description: `Reached level ${level}.`,
           })
         )
         break
-      case 2:
+      case 2: {
+        const isFinalBlow = deathCount % 2 === 0
         memories.push(
           entry(index, {
             type: 'death',
             typeLabel: 'Death',
             source: 'death',
-            title: 'Slain on the road',
-            description: 'Every journey has its setbacks.',
-            personalNote: 'Первая смерть — обидно до сих пор.',
+            title: `Fell in battle — ${enemies[deathCount % enemies.length]}`,
+            description: isFinalBlow
+              ? `Final blow: ${spells[deathCount % spells.length]}.`
+              : 'Every journey has its setbacks.',
+            ...(deathCount === 0 ? { personalNote: 'Первая смерть — обидно до сих пор.' } : {}),
           })
         )
+        deathCount += 1
         break
+      }
       case 3:
+        // no known title template for victories — the title stays original
         memories.push(
           entry(index, {
             type: 'victory',
@@ -121,8 +134,8 @@ function buildStraiderJournal(): Journal {
             type: 'instance',
             typeLabel: 'Instance',
             source: 'instance',
-            title: 'Deadmines cleared',
-            description: 'Your journey continues.',
+            title: `Entered ${instances[Math.floor(index / 9) % instances.length]}`,
+            description: 'Another chapter of your journey lies within.',
           })
         )
         break
@@ -138,13 +151,14 @@ function buildStraiderJournal(): Journal {
         )
         break
       case 6:
+        quests += 50
         memories.push(
           entry(index, {
             type: 'quest',
             typeLabel: 'Quest Milestone',
             source: 'quest',
-            title: '250 quests completed',
-            description: 'Your journey continues.',
+            title: `${quests} quests completed`,
+            description: 'Another important questing milestone has been reached.',
           })
         )
         break
@@ -160,18 +174,24 @@ function buildStraiderJournal(): Journal {
           })
         )
         break
-      default:
-        // player-written text: stays in the original language in every book
+      default: {
+        // manual (player-written) entries keep their title/description
+        // verbatim in every language — even when they look like templates
+        noteCount += 1
+        const reviewerCase = noteCount === 1
         memories.push(
           entry(index, {
             type: 'note',
             typeLabel: 'Journal Entry',
             source: 'manual',
-            title: 'Notes from the road',
-            description: 'Slept under the stars again. The road is long, and that is fine.',
+            title: reviewerCase ? 'Level 20' : 'Notes from the road',
+            description: reviewerCase
+              ? 'Your journey continues.'
+              : 'Slept under the stars again. The road is long, and that is fine.',
           })
         )
         break
+      }
     }
   }
 
