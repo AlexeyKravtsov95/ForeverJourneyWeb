@@ -204,6 +204,8 @@ const files = {
   'journal-59.txt': encodeLua(bigJournal(59, 'Полуночник'), { partSize: 240 }),
   'journal-80.txt': encodeLua(bigJournal(80, 'Marathon'), { partSize: 240 }),
   'journal-long.txt': encodeLua(longJournal, { partSize: 240 }),
+  // large journal for the client-side PDF generator performance check
+  'journal-500.txt': encodeLuaReal(bigJournal(500, 'Легенда')),
 }
 
 for (const [name, content] of Object.entries(files)) {

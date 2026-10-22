@@ -1,8 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ImportMeta } from '../lib/fjbook'
-import type { Journal, JournalMemory } from '../lib/journal'
-import { monthKey, monthLabel, toRoman } from '../lib/format'
+import type { Journal } from '../lib/journal'
+import { buildChapters, type Chapter } from '../lib/chapters'
+import { toRoman } from '../lib/format'
 import { fmt, type Lang, type Strings } from '../i18n'
+import { downloadJournalPdf } from '../pdf/download'
 import Cover from './Cover'
 import Introduction from './Introduction'
 import MemoryEntry from './MemoryEntry'
@@ -17,36 +19,27 @@ interface Props {
   onBack: () => void
 }
 
-interface Chapter {
-  key: string
-  label: string
-  memories: JournalMemory[]
-}
-
 export default function Book({ tr, lang, onLangChange, journal, meta, onBack }: Props) {
-  const chapters = useMemo<Chapter[]>(() => {
-    const sorted = [...journal.memories].sort((a, b) => {
-      const at = a.timestamp ?? Number.POSITIVE_INFINITY
-      const bt = b.timestamp ?? Number.POSITIVE_INFINITY
-      if (at !== bt) return at - bt
-      return (a.title || a.typeLabel || '').localeCompare(b.title || b.typeLabel || '')
-    })
-    const groups = new Map<string, JournalMemory[]>()
-    for (const memory of sorted) {
-      const key = memory.timestamp === undefined ? 'undated' : monthKey(memory.timestamp)
-      const list = groups.get(key)
-      if (list) list.push(memory)
-      else groups.set(key, [memory])
+  const chapters = useMemo<Chapter[]>(
+    () => buildChapters(journal.memories, lang, tr.undatedChapter),
+    [journal, lang, tr]
+  )
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [pdfError, setPdfError] = useState(false)
+
+  const handleDownloadPdf = async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    setPdfError(false)
+    try {
+      await downloadJournalPdf(journal, tr, lang)
+    } catch (error) {
+      console.error('PDF generation failed', error)
+      setPdfError(true)
+    } finally {
+      setPdfBusy(false)
     }
-    return [...groups.entries()].map(([key, memories]) => {
-      const firstDated = memories.find((memory) => memory.timestamp !== undefined)
-      return {
-        key,
-        label: firstDated ? monthLabel(firstDated.timestamp as number, lang) : tr.undatedChapter,
-        memories,
-      }
-    })
-  }, [journal, lang, tr])
+  }
 
   return (
     <div className="book-view">
@@ -74,13 +67,32 @@ export default function Book({ tr, lang, onLangChange, journal, meta, onBack }: 
           </div>
           <button
             type="button"
-            className="toolbar__btn toolbar__btn--print"
+            className="toolbar__btn"
             onClick={() => window.print()}
+            disabled={pdfBusy}
+            title={tr.toolbarPrint}
           >
-            {tr.toolbarPrint}
+            🖨 {tr.toolbarPrint}
+          </button>
+          <button
+            type="button"
+            className="toolbar__btn toolbar__btn--download"
+            onClick={handleDownloadPdf}
+            disabled={pdfBusy}
+            aria-busy={pdfBusy}
+          >
+            {pdfBusy ? tr.toolbarDownloadBusy : `⬇ ${tr.toolbarDownload}`}
           </button>
         </div>
       </header>
+      {pdfError && (
+        <div className="pdf-error" role="alert">
+          {tr.pdfError}{' '}
+          <button type="button" className="pdf-error__retry" onClick={handleDownloadPdf}>
+            {tr.toolbarDownload}
+          </button>
+        </div>
+      )}
 
       <div className="book">
         <Cover journal={journal} tr={tr} lang={lang} />
