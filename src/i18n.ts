@@ -108,7 +108,9 @@ export const strings: Record<Lang, Strings> = {
     coverTitle: 'My Journey',
     levelN: 'Level {level}',
     introTitle: 'Introduction',
-    introLead: 'The journey of {name} began on {date}.',
+    // The trailing period is added by endSentence() (src/lib/localize.ts):
+    // Russian dates already end with «г.» and must not produce «г..».
+    introLead: 'The journey of {name} began on {date}',
     introText:
       'What follows is a chronicle of roads, battles and quiet moments — recorded by the Forever Journey addon and bound into this book. May it remember what the years make us forget.',
     unknownDate: '—',
@@ -177,7 +179,7 @@ export const strings: Record<Lang, Strings> = {
     coverTitle: 'Моё путешествие',
     levelN: 'Уровень {level}',
     introTitle: 'Вступление',
-    introLead: 'Путешествие {name} началось {date}.',
+    introLead: 'Путешествие {name} началось {date}',
     introText:
       'Перед вами — летопись дорог, битв и тихих минут, записанная аддоном Forever Journey и переплетённая в эту книгу. Пусть она хранит то, что годы заставляют нас забывать.',
     unknownDate: '—',

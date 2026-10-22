@@ -22,7 +22,7 @@ def normalize(text):
     return re.sub(r"[\s\u00AD\u2060\uFEFF]+", "", text).casefold()
 
 
-def check(name, min_pages, must_contain=(), min_chapters=2, exact_pages=None):
+def check(name, min_pages, must_contain=(), min_chapters=2, exact_pages=None, must_not_contain=()):
     path = f"{BASE}/{name}.pdf"
     issues = []
     with open(path, "rb") as fh:
@@ -70,6 +70,9 @@ def check(name, min_pages, must_contain=(), min_chapters=2, exact_pages=None):
     for needle in must_contain:
         if normalize(needle) not in full:
             issues.append(f"expected text not found in PDF: {needle!r}")
+    for needle in must_not_contain:
+        if normalize(needle) in full:
+            issues.append(f"unexpected text found in PDF: {needle!r}")
 
     if pages < min_pages:
         issues.append(f"expected >= {min_pages} pages, got {pages}")
@@ -135,6 +138,94 @@ def main():
         min_pages=50,
         must_contain=("Легенда", "Память №1", "Память №500", "Заметка к памяти №496"),
         min_chapters=40,
+    )
+
+    # --- FJ-WEB-02.1: system-event localization, 59 memories, EN/RU --- #
+    # English book: addon templates and compact time format stay English;
+    # the player's Russian personal note stays verbatim (nothing is ever
+    # machine-translated).
+    ok &= check(
+        "client-localization-en",
+        min_pages=8,
+        must_contain=(
+            "Straider",
+            "ZONE",
+            "DEATH",
+            "VICTORY",
+            "INSTANCE",
+            "MEMORY",
+            "QUEST MILESTONE",
+            "Discovered Dun Morogh",
+            "Fell in battle — Stonesplinter Trogg",
+            "Final blow: Pyroblast.",
+            "Reached Level 9",
+            "Entered Deadmines",
+            "quests completed",
+            "Another chapter of your journey lies within",
+            "A new place became part of your journey",
+            "The battle ended in victory",
+            "Your journey continues",
+            "4d 22h",
+            "Первая смерть — обидно",
+        ),
+        must_not_contain=("Путешествие Straider началось", "4 д 22 ч"),
+    )
+    # Russian book: system events translated (incl. parameterized templates —
+    # names inside them stay original), Cyrillic extractable, single period
+    # after the year («г.» — not «г..»; the bare ".." needle is not usable
+    # because the font warm-up run's «…» extracts as "..."), localized time
+    # units, authored text of manual notes and personal notes untouched —
+    # even when they look exactly like system templates.
+    ok &= check(
+        "client-localization-ru",
+        min_pages=8,
+        must_contain=(
+            "Straider",
+            "ЗОНА",
+            "СМЕРТЬ",
+            "ПОБЕДА",
+            "ПОДЗЕМЕЛЬЕ",
+            "ВОСПОМИНАНИЕ",
+            "ЭТАП ЗАДАНИЙ",
+            "ДОСТИЖЕНИЕ",
+            "ЗАПИСЬ В ДНЕВНИКЕ",
+            "Открыта зона: Dun Morogh",
+            "Пал в бою — Stonesplinter Trogg",
+            "Последний удар: Pyroblast.",
+            "Достигнут 9-й уровень",
+            "Достигнут уровень 9.",
+            "Вход в подземелье: Deadmines",
+            "Выполнено заданий: 50",
+            "Впереди новая глава твоего путешествия",
+            "Достигнут ещё один важный этап выполнения заданий",
+            "Новое место стало частью твоего путешествия",
+            "Битва завершилась победой",
+            "На пути каждого героя случаются поражения",
+            "Путешествие продолжается",
+            "Путешествие Straider началось",
+            "4 д 22 ч",
+            "Первая смерть — обидно",
+            # authored text of the manual note (reviewer case) stays verbatim
+            "Level 20",
+            "Your journey continues",
+            "Notes from the road",
+            # unknown title templates stay original — by design
+            "Boss defeated",
+        ),
+        must_not_contain=(
+            "г..",  # the «2026 г..» regression must not come back
+            "Death",
+            "Quest Milestone",
+            "Discovered ",
+            "Fell in battle",
+            "Final blow",
+            "Reached Level",
+            "Entered ",
+            "quests completed",
+            "Another chapter of your journey",
+            "A new place became part",
+            "4d 22h",
+        ),
     )
     print("ALL OK" if ok else "ISSUES FOUND")
     sys.exit(0 if ok else 1)

@@ -64,7 +64,7 @@ PDF-проверки (`journal-59.txt`, `journal-80.txt`, `journal-long.txt`, `j
 `ForeverJourney_<Персонаж>.pdf`. Проверить генератор без браузера можно тем же кодом:
 
 ```bash
-npm run pdf:samples   # 6 образцов в docs/pdf-samples/client-*.pdf (0/19/59/80/500 записей + длинная запись)
+npm run pdf:samples   # 8 образцов в docs/pdf-samples/client-*.pdf (0/19/59/80/500 записей, длинная запись + пара EN/RU для локализации)
 ```
 
 Полная E2E-проверка (реальное скачивание из headless Chrome, MIME `application/pdf`,

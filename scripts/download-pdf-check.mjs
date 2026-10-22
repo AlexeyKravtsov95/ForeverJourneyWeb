@@ -115,6 +115,15 @@ async function evaluate(expression) {
 
 const scenarios = [
   { name: 'demo', kind: 'demo' },
+  // FJ-WEB-02.1: the enUS demo journal read in Russian — the preview must show
+  // localized system events before the (same-language) PDF is downloaded.
+  {
+    name: 'demo-ru-localized',
+    kind: 'demo',
+    switchLang: 'ru',
+    previewContains: ['Зона открыта', 'Запись в дневнике', 'Достигнут уровень 5.', '5 д 18 ч'],
+    previewNotContains: ['Zone Discovered', 'г..'],
+  },
   { name: 'empty', kind: 'fixture', file: 'fixtures/sample-empty.txt' },
   { name: 'journal-59', kind: 'fixture', file: 'fixtures/journal-59.txt' },
   { name: 'journal-80', kind: 'fixture', file: 'fixtures/journal-80.txt' },
@@ -163,6 +172,34 @@ async function runScenario(scenario) {
   await waitEvent('Page.loadEventFired')
   await importJournal(scenario)
   await sleep(300)
+
+  if (scenario.switchLang) {
+    await evaluate(`(() => {
+      const btn = [...document.querySelectorAll('.lang-switch button')].find(
+        (b) => b.textContent.trim() === ${JSON.stringify(scenario.switchLang.toUpperCase())}
+      )
+      if (!btn) throw new Error('language switch button not found')
+      btn.click()
+      return true
+    })()`)
+    await sleep(300)
+  }
+  if (scenario.previewContains || scenario.previewNotContains) {
+    const checks = await evaluate(`(() => {
+      const text = document.querySelector('.book-view').textContent
+      return {
+        contains: ${JSON.stringify(scenario.previewContains ?? [])}.map((n) => ({ n, ok: text.includes(n) })),
+        notContains: ${JSON.stringify(scenario.previewNotContains ?? [])}.map((n) => ({ n, ok: !text.includes(n) })),
+      }
+    })()`)
+    for (const { n, ok } of [...checks.contains, ...checks.notContains]) {
+      if (!ok) {
+        failures++
+        console.log(`  FAIL: preview text ${JSON.stringify(n)}`)
+      }
+    }
+    console.log(`  preview checks: ${[...checks.contains, ...checks.notContains].length} assertions`)
+  }
 
   // observe the blob the app hands to the browser without breaking the download
   await evaluate(`(() => {

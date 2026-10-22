@@ -1,6 +1,7 @@
 import type { Journal } from '../lib/journal'
 import { formatDate, formatPlayed } from '../lib/format'
-import { fmt, type Lang, type Strings } from '../i18n'
+import { introLeadText } from '../lib/localize'
+import type { Lang, Strings } from '../i18n'
 import { Divider } from './Ornaments'
 
 interface Props {
@@ -25,7 +26,7 @@ export default function Introduction({ journal, tr, lang }: Props) {
       : []),
     { label: tr.statDeaths, value: String(journey.deaths) },
     { label: tr.statQuests, value: String(journey.completedQuests) },
-    { label: tr.statPlayed, value: formatPlayed(journey.totalPlayed) },
+    { label: tr.statPlayed, value: formatPlayed(journey.totalPlayed, lang) },
     { label: tr.statMemories, value: String(memories.length) },
     ...(favorites > 0 ? [{ label: tr.statFavorites, value: String(favorites) }] : []),
   ]
@@ -38,10 +39,11 @@ export default function Introduction({ journal, tr, lang }: Props) {
         <Divider />
       </header>
       <p className="intro-lead">
-        {fmt(tr.introLead, {
-          name: character.name,
-          date: formatDate(journey.startedAt, lang) || tr.unknownDate,
-        })}
+        {introLeadText(
+          tr,
+          character.name,
+          formatDate(journey.startedAt, lang) || tr.unknownDate
+        )}
       </p>
       <p className="intro-text">{tr.introText}</p>
       <div className="stats">
