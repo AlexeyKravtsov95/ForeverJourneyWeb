@@ -168,6 +168,92 @@ describe('localizeMemory — template text', () => {
   })
 })
 
+describe('localizeMemory — manual memory detection (real addon markers)', () => {
+  // the exact imported entry from the review: MANUAL_MEMORY / USER
+  const importedManual = memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    typeLabel: 'MEMORY',
+    title: 'Reached Level 20',
+    description: 'Your journey continues.',
+    personalNote: '',
+    favorite: false,
+    location: 'Undercity',
+  })
+
+  it('keeps the manual title/description verbatim in RU and translates the type label', () => {
+    const view = localizeMemory(importedManual, 'ru')
+    expect(view.title).toBe('Reached Level 20')
+    expect(view.description).toBe('Your journey continues.')
+    expect(view.typeLabel).toBe('Воспоминание') // rendered uppercase by the UI
+    expect(view.location).toBe('Undercity')
+  })
+
+  it('keeps the manual entry verbatim in EN', () => {
+    const view = localizeMemory(importedManual, 'en')
+    expect(view.title).toBe('Reached Level 20')
+    expect(view.description).toBe('Your journey continues.')
+    expect(view.typeLabel).toBe('MEMORY')
+  })
+
+  it('never translates personalNote regardless of the event type', () => {
+    const withNote = memory({
+      type: 'DEATH',
+      source: 'RECORDED',
+      title: 'Fell in battle — Boss',
+      personalNote: 'Личная заметка stays as typed.',
+    })
+    expect(localizeMemory(withNote, 'ru').personalNote).toBe('Личная заметка stays as typed.')
+    expect(localizeMemory(importedManual, 'ru').personalNote).toBe('')
+  })
+
+  it('recognizes real and legacy manual markers case-insensitively', () => {
+    const markers: Array<[string, string]> = [
+      ['MANUAL_MEMORY', 'USER'],
+      ['manual_memory', 'user'],
+      ['NOTE', 'MANUAL'],
+      ['note', 'manual'],
+    ]
+    for (const [type, source] of markers) {
+      const entry = memory({
+        type,
+        source,
+        title: 'Discovered Dun Morogh',
+        description: 'Final blow: Pyroblast.',
+      })
+      const view = localizeMemory(entry, 'ru')
+      expect(view.title).toBe('Discovered Dun Morogh')
+      expect(view.description).toBe('Final blow: Pyroblast.')
+    }
+  })
+
+  it('translates the same template on a recorded automatic event (LEVEL / RECORDED)', () => {
+    const auto = memory({
+      type: 'LEVEL',
+      source: 'RECORDED',
+      typeLabel: 'LEVEL',
+      title: 'Reached Level 20',
+      description: 'Reached level 20.',
+    })
+    const view = localizeMemory(auto, 'ru')
+    expect(view.title).toBe('Достигнут 20-й уровень')
+    expect(view.description).toBe('Достигнут уровень 20.')
+    expect(view.typeLabel).toBe('Уровень')
+  })
+
+  it('keeps template-looking text of unknown-origin events original', () => {
+    const unknown = memory({
+      type: 'PET_BATTLE',
+      source: 'widget',
+      title: 'Reached Level 20',
+      description: 'Your journey continues.',
+    })
+    const view = localizeMemory(unknown, 'ru')
+    expect(view.title).toBe('Reached Level 20')
+    expect(view.description).toBe('Your journey continues.')
+  })
+})
+
 describe('localizeMemory — meta line', () => {
   it('formats the date per language and never translates the location', () => {
     expect(localizeMemory(memory(), 'ru').meta).toBe('14 июня 2026 г. · Darkshore')

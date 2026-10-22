@@ -56,9 +56,10 @@ function buildStraiderJournal(): Journal {
   const instances = ['Deadmines', 'The Stockade', 'Shadowfang Keep']
   const day = (index: number) => Date.UTC(2026, 0, 2, 12) + index * 3 * 86_400_000
   const entry = (index: number, over: Partial<JournalMemory>): JournalMemory => ({
-    type: 'memory',
+    // the real addon's automatic events: uppercase types, source "RECORDED"
+    type: 'MEMORY',
     typeLabel: 'Memory',
-    source: 'milestone',
+    source: 'RECORDED',
     title: '',
     description: 'Your journey continues.',
     personalNote: '',
@@ -79,9 +80,8 @@ function buildStraiderJournal(): Journal {
       case 0:
         memories.push(
           entry(index, {
-            type: 'zone',
+            type: 'ZONE',
             typeLabel: 'Zone',
-            source: 'zone',
             title: `Discovered ${zone}`,
             description: 'A new place became part of your journey.',
           })
@@ -91,9 +91,8 @@ function buildStraiderJournal(): Journal {
         level += 1
         memories.push(
           entry(index, {
-            type: 'level',
+            type: 'LEVEL',
             typeLabel: 'Level Up',
-            source: 'level',
             title: `Reached Level ${level}`,
             description: `Reached level ${level}.`,
           })
@@ -103,9 +102,8 @@ function buildStraiderJournal(): Journal {
         const isFinalBlow = deathCount % 2 === 0
         memories.push(
           entry(index, {
-            type: 'death',
+            type: 'DEATH',
             typeLabel: 'Death',
-            source: 'death',
             title: `Fell in battle — ${enemies[deathCount % enemies.length]}`,
             description: isFinalBlow
               ? `Final blow: ${spells[deathCount % spells.length]}.`
@@ -120,9 +118,8 @@ function buildStraiderJournal(): Journal {
         // no known title template for victories — the title stays original
         memories.push(
           entry(index, {
-            type: 'victory',
+            type: 'VICTORY',
             typeLabel: 'Victory',
-            source: 'boss',
             title: 'Boss defeated',
             description: 'The battle ended in victory.',
           })
@@ -131,9 +128,8 @@ function buildStraiderJournal(): Journal {
       case 4:
         memories.push(
           entry(index, {
-            type: 'instance',
+            type: 'INSTANCE',
             typeLabel: 'Instance',
-            source: 'instance',
             title: `Entered ${instances[Math.floor(index / 9) % instances.length]}`,
             description: 'Another chapter of your journey lies within.',
           })
@@ -142,9 +138,8 @@ function buildStraiderJournal(): Journal {
       case 5:
         memories.push(
           entry(index, {
-            type: 'memory',
+            type: 'MEMORY',
             typeLabel: 'Memory',
-            source: 'milestone',
             title: 'A quiet evening by the fire',
             description: 'Your journey continues.',
           })
@@ -154,9 +149,8 @@ function buildStraiderJournal(): Journal {
         quests += 50
         memories.push(
           entry(index, {
-            type: 'quest',
+            type: 'QUEST',
             typeLabel: 'Quest Milestone',
-            source: 'quest',
             title: `${quests} quests completed`,
             description: 'Another important questing milestone has been reached.',
           })
@@ -165,9 +159,8 @@ function buildStraiderJournal(): Journal {
       case 7:
         memories.push(
           entry(index, {
-            type: 'achievement',
+            type: 'ACHIEVEMENT',
             typeLabel: 'Achievement',
-            source: 'achievement',
             title: 'Explorer of the Eastern Kingdoms',
             description: 'A new place became part of your journey.',
             favorite: index === 25,
@@ -175,15 +168,16 @@ function buildStraiderJournal(): Journal {
         )
         break
       default: {
-        // manual (player-written) entries keep their title/description
-        // verbatim in every language — even when they look like templates
+        // manual (player-written) entries — real addon markers MANUAL_MEMORY /
+        // USER — keep their title/description verbatim in every language,
+        // even when they look like templates
         noteCount += 1
         const reviewerCase = noteCount === 1
         memories.push(
           entry(index, {
-            type: 'note',
+            type: 'MANUAL_MEMORY',
             typeLabel: 'Journal Entry',
-            source: 'manual',
+            source: 'USER',
             title: reviewerCase ? 'Level 20' : 'Notes from the road',
             description: reviewerCase
               ? 'Your journey continues.'

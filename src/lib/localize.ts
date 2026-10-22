@@ -68,16 +68,62 @@ function translateTypeLabel(label: string, lang: Lang): string {
 
 /**
  * Manual (player-written) entries: their titles and descriptions are authored
- * text and are never translated, whatever they contain. The addon marks them
- * type "note" / source "manual" (JournalExport.lua; seen in every fixture).
- * When an entry's origin is ambiguous, the original text always wins.
+ * text and are never translated, whatever they contain. The real addon marks
+ * them type "MANUAL_MEMORY" / source "USER" (MemoryActions.lua, ViewModel.lua,
+ * JournalExport.lua); older exports and site fixtures used type "note" /
+ * source "manual". Compared case-insensitively.
  */
+const MANUAL_TYPES = new Set(['note', 'manual_memory'])
+const MANUAL_SOURCES = new Set(['manual', 'user'])
+
 function isManualEntry(memory: JournalMemory): boolean {
-  return memory.type === 'note' || memory.source === 'manual'
+  return (
+    MANUAL_TYPES.has(memory.type.trim().toLowerCase()) ||
+    MANUAL_SOURCES.has(memory.source.trim().toLowerCase())
+  )
+}
+
+/**
+ * Confirmed system events (addon-recorded): only these get template
+ * translation. The real exporter writes source "RECORDED" and uppercase
+ * types; older fixtures used lowercase types with per-type sources. Anything
+ * else — unknown origin — keeps its original text even when it happens to
+ * match a template.
+ */
+const SYSTEM_TYPES = new Set([
+  'zone',
+  'death',
+  'level',
+  'victory',
+  'instance',
+  'memory',
+  'quest',
+  'achievement',
+])
+const SYSTEM_SOURCES = new Set([
+  'zone',
+  'death',
+  'level',
+  'victory',
+  'instance',
+  'memory',
+  'quest',
+  'achievement',
+  'boss',
+  'milestone',
+  'recorded',
+])
+
+function isSystemEntry(memory: JournalMemory): boolean {
+  return (
+    !isManualEntry(memory) &&
+    (SYSTEM_TYPES.has(memory.type.trim().toLowerCase()) ||
+      SYSTEM_SOURCES.has(memory.source.trim().toLowerCase()))
+  )
 }
 
 function translateTitle(title: string, memory: JournalMemory, lang: Lang): string {
-  if (lang !== 'ru' || isManualEntry(memory)) return title
+  if (lang !== 'ru' || !isSystemEntry(memory)) return title
   const trimmed = title.trim()
   for (const [pattern, translate] of TITLE_PATTERNS_RU) {
     const match = trimmed.match(pattern)
@@ -87,7 +133,7 @@ function translateTitle(title: string, memory: JournalMemory, lang: Lang): strin
 }
 
 function translateDescription(description: string, memory: JournalMemory, lang: Lang): string {
-  if (lang !== 'ru' || isManualEntry(memory)) return description
+  if (lang !== 'ru' || !isSystemEntry(memory)) return description
   const trimmed = description.trim()
   if (DESCRIPTIONS_RU[trimmed]) return DESCRIPTIONS_RU[trimmed]
   for (const [pattern, translate] of DESCRIPTION_PATTERNS_RU) {

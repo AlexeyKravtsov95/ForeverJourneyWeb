@@ -5,6 +5,7 @@ import Landing from './components/Landing'
 import { buildDemoCode, demoJournal } from './demo/demoJournal'
 import { strings } from './i18n'
 import { importJournal, type ImportMeta } from './lib/fjbook'
+import type { Journal } from './lib/journal'
 
 const meta: ImportMeta = { parts: 4, decodedBytes: 4096, checksum: 1 }
 
@@ -83,5 +84,71 @@ describe('demo journal', () => {
       expect(result.journal.memories).toHaveLength(demoJournal.memories.length)
       expect(result.journal.character.name).toBe(demoJournal.character.name)
     }
+  })
+})
+
+// the real addon's manual-memory markers (MANUAL_MEMORY/USER) against an
+// automatic RECORDED event with the same template-looking text
+const markerJournal: Journal = {
+  ...demoJournal,
+  memories: [
+    {
+      type: 'MANUAL_MEMORY',
+      typeLabel: 'MEMORY',
+      source: 'USER',
+      title: 'Reached Level 20',
+      description: 'Your journey continues.',
+      personalNote: '',
+      favorite: false,
+      timestamp: Date.UTC(2026, 4, 5, 12),
+      location: 'Undercity',
+    },
+    {
+      type: 'LEVEL',
+      typeLabel: 'LEVEL',
+      source: 'RECORDED',
+      title: 'Reached Level 20',
+      description: 'Reached level 20.',
+      personalNote: '',
+      favorite: false,
+      timestamp: Date.UTC(2026, 4, 6, 12),
+      location: 'Undercity',
+    },
+  ],
+}
+
+describe('manual memory markers (web preview)', () => {
+  it('RU preview keeps the manual text verbatim and translates the recorded twin', () => {
+    const html = renderToString(
+      <Book
+        tr={strings.ru}
+        lang="ru"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={markerJournal}
+        meta={meta}
+      />
+    )
+    expect(html).toContain('Reached Level 20') // manual title kept
+    expect(html).toContain('Your journey continues.') // manual description kept
+    expect(html).toContain('Достигнут 20-й уровень') // recorded twin translated
+    expect(html).toContain('Достигнут уровень 20.')
+    expect(html).toContain('Воспоминание') // MEMORY type label in RU
+  })
+
+  it('EN preview keeps everything as imported', () => {
+    const html = renderToString(
+      <Book
+        tr={strings.en}
+        lang="en"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={markerJournal}
+        meta={meta}
+      />
+    )
+    expect(html).toContain('Reached Level 20')
+    expect(html).toContain('Your journey continues.')
+    expect(html).toContain('MEMORY')
   })
 })
