@@ -44,6 +44,32 @@ describe('rendering', () => {
     expect(html).toContain('Первое море')
     expect(html).toContain('The journey continues')
   })
+
+  it('Book in Russian localizes system events and keeps player text verbatim', () => {
+    const html = renderToString(
+      <Book
+        tr={strings.ru}
+        lang="ru"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={demoJournal}
+        meta={meta}
+      />
+    )
+    expect(html).toContain('Зона открыта')
+    expect(html).toContain('Запись в дневнике')
+    expect(html).toContain('Уровень 5')
+    expect(html).toContain('Достигнут уровень 5.')
+    expect(html).toContain('Достигнут максимальный уровень.')
+    // player-written text is never translated
+    expect(html).toContain('Первое море')
+    expect(html).toContain('The trees here lean away from the sea')
+    // localized time format and a single period after the Russian year
+    // (the calendar day depends on the reader's timezone, so match any June day)
+    expect(html).toContain('5 д 18 ч')
+    expect(html).toMatch(/Путешествие Aelirien началось \d{1,2} июня 2026 г\./)
+    expect(html).not.toContain('..')
+  })
 })
 
 describe('demo journal', () => {

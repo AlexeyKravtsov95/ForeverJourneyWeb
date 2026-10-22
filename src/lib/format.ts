@@ -26,15 +26,21 @@ export function monthLabel(ms: number, lang: Lang): string {
   return new Intl.DateTimeFormat(locales[lang], { month: 'long', year: 'numeric' }).format(ms)
 }
 
-export function formatPlayed(totalSeconds: number): string {
-  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return '0m'
+const playedUnits: Record<Lang, [string, string, string]> = {
+  en: ['d', 'h', 'm'],
+  ru: [' д', ' ч', ' мин'],
+}
+
+export function formatPlayed(totalSeconds: number, lang: Lang): string {
+  const [d, h, m] = playedUnits[lang]
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return `0${m}`
   const days = Math.floor(totalSeconds / 86400)
   const hours = Math.floor((totalSeconds % 86400) / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const parts: string[] = []
-  if (days) parts.push(`${days}d`)
-  if (hours) parts.push(`${hours}h`)
-  if (minutes || parts.length === 0) parts.push(`${minutes}m`)
+  if (days) parts.push(`${days}${d}`)
+  if (hours) parts.push(`${hours}${h}`)
+  if (minutes || parts.length === 0) parts.push(`${minutes}${m}`)
   return parts.slice(0, 2).join(' ')
 }
 

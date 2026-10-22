@@ -79,6 +79,23 @@ describe('importJournal — happy paths', () => {
     }
   })
 
+  it('round-trips a full journal through FJBOOK1 unchanged (export format untouched)', () => {
+    const result = importJournal(encodeJournalCode(cyrillicJournal, { partSize: 120 }))
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      // the fixture uses Lua-style Unix seconds in memory timestamps; the schema
+      // normalizes those to milliseconds — everything else must be identical
+      const expected: Journal = {
+        ...cyrillicJournal,
+        memories: cyrillicJournal.memories.map((entry) => ({
+          ...entry,
+          timestamp: (entry.timestamp as number) * 1000,
+        })),
+      }
+      expect(result.journal).toEqual(expected)
+    }
+  })
+
   it('imports a multi-part export pasted in any order with junk between blocks', () => {
     const parts = encodeJournalParts(cyrillicJournal, { partSize: 120 })
     expect(parts.length).toBeGreaterThan(3)

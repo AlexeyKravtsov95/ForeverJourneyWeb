@@ -7,6 +7,7 @@ import type { Style } from '@react-pdf/types'
 import type { Journal, JournalMemory } from '../lib/journal'
 import { buildChapters } from '../lib/chapters'
 import { formatDate, formatPlayed, toRoman } from '../lib/format'
+import { introLeadText, localizeMemory } from '../lib/localize'
 import { fmt, type Lang, type Strings } from '../i18n'
 import { BOOK_FONT } from './registerFonts'
 import { CornerFlourish, Crest, Divider, Star, TypeIcon } from './ornaments'
@@ -369,7 +370,7 @@ function Introduction({ journal, tr, lang }: BookDocumentProps) {
       : []),
     [tr.statDeaths, String(journey.deaths)],
     [tr.statQuests, String(journey.completedQuests)],
-    [tr.statPlayed, formatPlayed(journey.totalPlayed)],
+    [tr.statPlayed, formatPlayed(journey.totalPlayed, lang)],
     [tr.statMemories, String(memories.length)],
     ...(favorites > 0
       ? ([[tr.statFavorites, String(favorites)]] as Array<[string, string]>)
@@ -385,10 +386,11 @@ function Introduction({ journal, tr, lang }: BookDocumentProps) {
         <Divider width={170} />
       </View>
       <Text style={styles.introLead}>
-        {fmt(tr.introLead, {
-          name: character.name,
-          date: formatDate(journey.startedAt, lang) || tr.unknownDate,
-        })}
+        {introLeadText(
+          tr,
+          character.name,
+          formatDate(journey.startedAt, lang) || tr.unknownDate
+        )}
       </Text>
       <Text style={styles.introText}>{tr.introText}</Text>
       <View style={styles.stats}>
@@ -447,7 +449,7 @@ function MemoryEntryView({
   lang: Lang
   isLast: boolean
 }) {
-  const meta = [formatDate(memory.timestamp, lang), memory.location].filter(Boolean).join(' · ')
+  const view = localizeMemory(memory, lang)
 
   return (
     <View
@@ -460,10 +462,10 @@ function MemoryEntryView({
     >
       {/* keep the head (type + title + meta) glued to the first lines of text */}
       <View style={styles.memoryHead} minPresenceAhead={100}>
-        {memory.typeLabel ? (
+        {view.typeLabel ? (
           <View style={styles.memoryType}>
             <TypeIcon type={memory.type} />
-            <Text style={styles.memoryTypeLabel}>{memory.typeLabel.toUpperCase()}</Text>
+            <Text style={styles.memoryTypeLabel}>{view.typeLabel.toUpperCase()}</Text>
           </View>
         ) : null}
         {memory.favorite ? (
@@ -472,16 +474,16 @@ function MemoryEntryView({
             <Text style={styles.memoryFavoriteLabel}>{tr.favoriteLabel.toUpperCase()}</Text>
           </View>
         ) : null}
-        {memory.title ? <Text style={styles.memoryTitle}>{memory.title}</Text> : null}
-        {meta ? <Text style={styles.memoryMeta}>{meta}</Text> : null}
+        {view.title ? <Text style={styles.memoryTitle}>{view.title}</Text> : null}
+        {view.meta ? <Text style={styles.memoryMeta}>{view.meta}</Text> : null}
       </View>
-      {memory.description ? (
-        <MultilineText text={memory.description} style={styles.memoryDescription} />
+      {view.description ? (
+        <MultilineText text={view.description} style={styles.memoryDescription} />
       ) : null}
-      {memory.personalNote ? (
+      {view.personalNote ? (
         <View style={styles.memoryNote}>
           <Text style={styles.memoryNoteLabel}>{tr.personalNoteLabel.toUpperCase()}</Text>
-          <MultilineText text={memory.personalNote} style={styles.memoryNoteText} />
+          <MultilineText text={view.personalNote} style={styles.memoryNoteText} />
         </View>
       ) : null}
     </View>

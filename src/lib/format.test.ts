@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDate, monthLabel, toRoman } from './format'
+import { formatDate, formatPlayed, monthLabel, toRoman } from './format'
 
 describe('format', () => {
   it('formats valid dates in both languages', () => {
@@ -32,5 +32,22 @@ describe('format', () => {
     expect(toRoman(3999)).toBe('MMMCMXCIX')
     expect(toRoman(0)).toBe('0')
     expect(toRoman(-1)).toBe('-1')
+  })
+})
+
+describe('formatPlayed', () => {
+  it('formats time played in Russian units', () => {
+    expect(formatPlayed(424_800, 'ru')).toBe('4 д 22 ч') // 4d 22h
+    expect(formatPlayed(19_800, 'ru')).toBe('5 ч 30 мин') // 5h 30m
+    expect(formatPlayed(2_700, 'ru')).toBe('45 мин')
+    expect(formatPlayed(864_000, 'ru')).toBe('10 д')
+    expect(formatPlayed(0, 'ru')).toBe('0 мин')
+  })
+
+  it('keeps the compact English format', () => {
+    expect(formatPlayed(424_800, 'en')).toBe('4d 22h')
+    expect(formatPlayed(19_800, 'en')).toBe('5h 30m')
+    expect(formatPlayed(2_700, 'en')).toBe('45m')
+    expect(formatPlayed(0, 'en')).toBe('0m')
   })
 })
