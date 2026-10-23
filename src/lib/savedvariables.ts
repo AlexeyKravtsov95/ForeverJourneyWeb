@@ -376,8 +376,11 @@ export function readSavedVariables(source: Uint8Array | string): SavedVariablesR
     return { status: 'error', code: 'NO_CHARACTERS' }
   }
 
+  // Explicit "ru" collation: with the runtime's default locale the order of
+  // Cyrillic vs Latin keys flips between environments (ru-RU puts Cyrillic
+  // first, en-US puts Latin first), which broke CI after the merge.
   const characters: SavedVariablesCharacter[] = Object.keys(charactersTable)
-    .sort((a, b) => a.localeCompare(b))
+    .sort((a, b) => a.localeCompare(b, 'ru'))
     .map((key) => {
       const record = asTable(charactersTable[key]) ?? {}
       const { realm, name } = splitKey(key)
