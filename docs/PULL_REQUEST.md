@@ -222,6 +222,10 @@ CSS-фикс печати: `box-decoration-break: clone` для `.sheet` — с�
   импортирует журнал, нарезанный именно так; фикстура `fixtures/lua-style-30000.txt`
   (80 записей, 2 части: 30000+12000) проверена через реальный UI браузера
   («Спринтер», Adler-32 OK).
+  > **Уточнение FJ-RELEASE-01 (2026-10-23):** настоящая нарезка JournalExport.lua
+  > иная — равномерные блоки: штатно по 30000 символов, fallback-режим по 12000.
+  > Экспортёр фикстур и тесты скорректированы в PR #7; здесь оставлено как
+  > было записано на момент FJ-WEB-01.
 - **null-поля**: Lua пишет null вместо пустых значений — тест с `personalNote: null`,
   `typeLabel: null`, `location: null`, `favorite: null`, `timestamp: null`,
   `race: null`, `startedAt: null`, `exportedAt: null`, `deaths: null`,

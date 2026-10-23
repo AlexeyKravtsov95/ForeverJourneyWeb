@@ -411,30 +411,45 @@ describe('JournalExport.lua parity (MAX_ENTRIES / MAX_BYTES / block split / null
     }
   })
 
-  it('imports the real exporter block split: first block 30000 chars, then 12000 each', () => {
+  // JournalExport.lua slices the base64 string into uniform blocks: the
+  // standard export uses 30000-char blocks, the fallback mode 12000-char ones.
+  function exportInUniformBlocks(journal: object, partSize: number): string[] {
+    const bytes = encodeUtf8(JSON.stringify(journal))
+    const checksum = adler32(bytes).toString(16).padStart(8, '0').toUpperCase()
+    const base64 = bytesToBase64(bytes)
+    const total = Math.max(1, Math.ceil(base64.length / partSize))
+    return Array.from(
+      { length: total },
+      (_, index) =>
+        `FJBOOK1:${index + 1}/${total}:${checksum}:${base64.slice(index * partSize, (index + 1) * partSize)}`
+    )
+  }
+
+  it('imports the standard exporter split: uniform 30000-char blocks', () => {
     const journal = {
       ...cyrillicJournal,
       memories: Array.from({ length: 12_000 }, (_, index) => shortMemory(index)),
     }
-    const bytes = encodeUtf8(JSON.stringify(journal))
-    const checksum = adler32(bytes).toString(16).padStart(8, '0').toUpperCase()
-    const base64 = bytesToBase64(bytes)
-    const sizes: number[] = [Math.min(30_000, base64.length)]
-    let rest = base64.length - 30_000
-    while (rest > 0) {
-      sizes.push(Math.min(12_000, rest))
-      rest -= 12_000
-    }
-    const blocks: string[] = []
-    let offset = 0
-    sizes.forEach((size, index) => {
-      blocks.push(`FJBOOK1:${index + 1}/${sizes.length}:${checksum}:${base64.slice(offset, offset + size)}`)
-      offset += size
-    })
+    const blocks = exportInUniformBlocks(journal, 30_000)
     expect(blocks.length).toBeGreaterThan(2)
     const result = importJournal(blocks.join('\n'))
     expect(result.status).toBe('ok')
     if (result.status === 'ok') expect(result.meta.parts).toBe(blocks.length)
+  })
+
+  it('imports the fallback exporter split: uniform 12000-char blocks', () => {
+    const journal = {
+      ...cyrillicJournal,
+      memories: Array.from({ length: 12_000 }, (_, index) => shortMemory(index)),
+    }
+    const blocks = exportInUniformBlocks(journal, 12_000)
+    expect(blocks.length).toBeGreaterThan(2)
+    const result = importJournal(blocks.join('\n'))
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      expect(result.meta.parts).toBe(blocks.length)
+      expect(result.journal.memories).toHaveLength(12_000)
+    }
   })
 
   it('normalizes the null fields the Lua exporter emits for empty values', () => {

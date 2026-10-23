@@ -10,7 +10,7 @@
 //     (fonts/library load from our own origin; journal data never leaves)
 // Usage: node scripts/download-pdf-check.mjs [baseUrl]  (default http://127.0.0.1:4173/)
 import { spawn } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +22,38 @@ const PORT = 9334
 const CHROME_PROFILE = join(tmpdir(), `fj-chrome-dl-${Date.now()}`)
 const DOWNLOAD_DIR = join(tmpdir(), `fj-downloads-${Date.now()}`)
 mkdirSync(DOWNLOAD_DIR, { recursive: true })
+
+const scenarios = [
+  { name: 'demo', kind: 'demo' },
+  // FJ-WEB-02.1: the enUS demo journal read in Russian — the preview must show
+  // localized system events before the (same-language) PDF is downloaded.
+  {
+    name: 'demo-ru-localized',
+    kind: 'demo',
+    switchLang: 'ru',
+    previewContains: ['Зона открыта', 'Запись в дневнике', 'Достигнут уровень 5.', '5 д 18 ч'],
+    previewNotContains: ['Zone Discovered', 'г..'],
+  },
+  { name: 'empty', kind: 'fixture', file: 'fixtures/sample-empty.txt' },
+  { name: 'journal-59', kind: 'fixture', file: 'fixtures/journal-59.txt' },
+  { name: 'journal-80', kind: 'fixture', file: 'fixtures/journal-80.txt' },
+  { name: 'journal-long-entry', kind: 'fixture', file: 'fixtures/journal-long.txt' },
+  { name: 'journal-500', kind: 'fixture', file: 'fixtures/journal-500.txt' },
+]
+
+// fixtures/ is gitignored; fail fast with a clear hint instead of an ENOENT
+// stack once Chrome is already running
+const missing = scenarios
+  .filter((scenario) => scenario.file)
+  .filter((scenario) => !existsSync(resolve(ROOT, scenario.file)))
+if (missing.length > 0) {
+  console.error(
+    `Missing test data: ${missing.map((s) => s.file).join(', ')}\n` +
+      'Fixtures are generated locally and not shipped with the repository. Run:\n' +
+      '  npm run generate:codes'
+  )
+  process.exit(2)
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -112,24 +144,6 @@ async function evaluate(expression) {
   }
   return result.result.value
 }
-
-const scenarios = [
-  { name: 'demo', kind: 'demo' },
-  // FJ-WEB-02.1: the enUS demo journal read in Russian — the preview must show
-  // localized system events before the (same-language) PDF is downloaded.
-  {
-    name: 'demo-ru-localized',
-    kind: 'demo',
-    switchLang: 'ru',
-    previewContains: ['Зона открыта', 'Запись в дневнике', 'Достигнут уровень 5.', '5 д 18 ч'],
-    previewNotContains: ['Zone Discovered', 'г..'],
-  },
-  { name: 'empty', kind: 'fixture', file: 'fixtures/sample-empty.txt' },
-  { name: 'journal-59', kind: 'fixture', file: 'fixtures/journal-59.txt' },
-  { name: 'journal-80', kind: 'fixture', file: 'fixtures/journal-80.txt' },
-  { name: 'journal-long-entry', kind: 'fixture', file: 'fixtures/journal-long.txt' },
-  { name: 'journal-500', kind: 'fixture', file: 'fixtures/journal-500.txt' },
-]
 
 let failures = 0
 
