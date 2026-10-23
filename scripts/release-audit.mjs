@@ -5,15 +5,16 @@
 //   - multi-part import pasted incrementally: after a partial paste the page
 //     shows the needs-parts status (not an error), and the book renders once
 //     the remaining blocks arrive — earlier parts do not need re-entry
-//   - corrupted code (bad checksum) shows an error and never exposes journal
-//     contents or raw Base64 in the message
+//   - corrupted code (guaranteed checksum change) shows the CHECKSUM_MISMATCH
+//     error specifically and never exposes journal contents or raw Base64
+//     in the message
 //   - RU <-> EN switching inside the book view keeps the journal loaded
 //     (same chapter/memory counts) while system UI re-localizes
 //   - mobile viewports (Android 360x800, iPhone 390x844): landing, import and
 //     book render without horizontal overflow
 // Usage: node scripts/release-audit.mjs [baseUrl]   (default http://127.0.0.1:4173/)
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,6 +25,20 @@ const CHROME =
   process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const PORT = 9335
 const CHROME_PROFILE = resolve(tmpdir(), `fj-chrome-audit-${Date.now()}`)
+
+// fixtures/ is gitignored; every browser script needs a freshly generated set.
+function readFixture(name) {
+  const path = resolve(ROOT, 'fixtures', name)
+  if (!existsSync(path)) {
+    console.error(
+      `Missing test data: fixtures/${name}\n` +
+        'Fixtures are generated locally and not shipped with the repository. Run:\n' +
+        '  npm run generate:codes'
+    )
+    process.exit(2)
+  }
+  return readFileSync(path, 'utf8')
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -171,7 +186,7 @@ await send('Runtime.enable')
 // --- 1. incremental multi-part import -------------------------------------
 console.log('\n=== incremental multi-part import ===')
 await navigate()
-const allBlocks = readFileSync(resolve(ROOT, 'fixtures/journal-59.txt'), 'utf8')
+const allBlocks = readFixture('journal-59.txt')
   .split(/\r?\n/)
   .filter((line) => line.startsWith('FJBOOK1:'))
 const total = Number(allBlocks[0].split(':')[1].split('/')[1])
@@ -206,16 +221,30 @@ for (let i = rest.length - 1; i > 0; i--) {
 await pasteAndImport([...first, ...rest].join('\n'))
 check((await waitForBook()) === 'ok', 'book renders after the remaining parts are pasted')
 
-// --- 2. corrupted code: localized error, no content echo -------------------
+// --- 2. corrupted code: checksum error, no content echo ---------------------
 console.log('\n=== corrupted code error ===')
 await navigate()
-const goodLines = readFileSync(resolve(ROOT, 'fixtures/journal-59.txt'), 'utf8')
+// force English so the expected error wording is deterministic regardless of
+// the browser locale picked up by detectLang()
+await clickLang('en')
+const goodLines = readFixture('journal-59.txt')
   .split(/\r?\n/)
   .filter((l) => l.startsWith('FJBOOK1:'))
-// break the checksum of every block (replace the first hex digit with 0)
+// break the declared checksum of every block: the first hex digit is flipped
+// to a DIFFERENT hex digit, so the value is guaranteed to change. All blocks
+// carry the same checksum string, so they stay mutually consistent and the
+// expected failure is CHECKSUM_MISMATCH (not CHECKSUM_PARTS_MISMATCH).
 const broken = goodLines
-  .map((line) => line.replace(/^(FJBOOK1:\d+\/\d+:)([0-9A-Fa-f])/, '$10'))
+  .map((line) =>
+    line.replace(/^(FJBOOK1:\d+\/\d+:)([0-9A-Fa-f])/, (_, header, first) => header + (first === '0' ? '1' : '0'))
+  )
   .join('\n')
+// sanity: the corruption above must actually change the declared checksum
+const originalSum = goodLines[0].split(':')[2]
+const brokenSum = broken.split('\n')[0].split(':')[2]
+if (originalSum === brokenSum) {
+  throw new Error('test setup bug: checksum corruption did not change the value')
+}
 await pasteAndImport(broken)
 const errorView = await evaluate(`(() => {
   const error = document.querySelector('.panel__status--error')
@@ -225,6 +254,14 @@ const errorView = await evaluate(`(() => {
   }
 })()`)
 check(errorView.text !== null, 'checksum mismatch shows an error')
+check(
+  typeof errorView.text === 'string' && errorView.text.includes('Checksum mismatch'),
+  'the error is specifically CHECKSUM_MISMATCH ("Checksum mismatch — the code is corrupted")'
+)
+check(
+  typeof errorView.text === 'string' && !errorView.text.includes('different checksums'),
+  'not the parts-mismatch error (all blocks declare one checksum)'
+)
 check(errorView.bookShown === false, 'corrupted journal is not rendered')
 // the Base64 payload must never be echoed back in the error message
 const payloadSample = goodLines[0].split(':')[3].slice(0, 64)
@@ -240,7 +277,7 @@ check(
 // --- 3. RU/EN switching keeps the journal ---------------------------------
 console.log('\n=== RU/EN switch inside the book ===')
 await navigate()
-const goodCode = readFileSync(resolve(ROOT, 'fixtures/journal-59.txt'), 'utf8')
+const goodCode = readFixture('journal-59.txt')
 await pasteAndImport(goodCode)
 check((await waitForBook()) === 'ok', 'journal-59 book renders')
 
@@ -288,7 +325,7 @@ for (const viewport of MOBILE_VIEWPORTS) {
   check(landing.textarea, 'import textarea is reachable')
   check(!landing.overflowX, 'no horizontal overflow on the landing')
 
-  await pasteAndImport(goodCode)
+  await pasteAndImport(readFixture('journal-59.txt'))
   check((await waitForBook()) === 'ok', 'book renders in the mobile viewport')
   const bookView = await evaluate(`(() => ({
     overflowX:

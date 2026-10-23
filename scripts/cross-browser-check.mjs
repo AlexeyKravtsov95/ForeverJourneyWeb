@@ -8,7 +8,7 @@
 //   npx playwright install firefox webkit
 // Usage: node scripts/cross-browser-check.mjs [baseUrl] [browser ...]
 //   baseUrl default http://127.0.0.1:4173/ ; browsers default: firefox webkit
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -28,7 +28,17 @@ try {
   process.exit(2)
 }
 
-const FIXTURE = readFileSync(resolve(ROOT, 'fixtures/journal-59.txt'), 'utf8')
+// fixtures/ is gitignored; every browser script needs a freshly generated set.
+const FIXTURE_PATH = resolve(ROOT, 'fixtures/journal-59.txt')
+if (!existsSync(FIXTURE_PATH)) {
+  console.error(
+    `Missing test data: fixtures/journal-59.txt\n` +
+      'Fixtures are generated locally and not shipped with the repository. Run:\n' +
+      '  npm run generate:codes'
+  )
+  process.exit(2)
+}
+const FIXTURE = readFileSync(FIXTURE_PATH, 'utf8')
 
 let failures = 0
 function check(browser, ok, label) {
@@ -40,9 +50,11 @@ function check(browser, ok, label) {
 
 async function runBrowser(name) {
   console.log(`\n=== ${name} ===`)
+  // an unknown requested browser must fail the check, not silently skip it
   const engine = pw[name]
   if (!engine) {
-    console.log('  SKIPPED: unknown browser')
+    failures++
+    console.log(`  FAIL: unknown browser "${name}" (playwright engines: chromium, firefox, webkit)`)
     return
   }
   const browser = await engine.launch()
