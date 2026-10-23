@@ -2,6 +2,11 @@
 # VK Cloud Object Storage bucket (Moscow region). Full runbook:
 # docs/DEPLOYMENT.md.
 #
+# Автодеплой: каждый push в main (merge PR, revert, прямой push)
+# публикует сборку. Ручной запуск workflow_dispatch сохраняет галочку
+# dry_run; у события push нет контекста inputs, поэтому DRY_RUN остаётся
+# пустым и автозапуск всегда публикует по-настоящему.
+#
 # The publish target is fixed and validated by scripts/deploy-s3-lib.mjs
 # (PRODUCTION_TARGET): the workflow cannot redirect signed S3 requests to
 # any other bucket or endpoint. Credentials come only from repository
@@ -13,10 +18,8 @@ on:
         description: 'Проверить план без загрузки'
         type: boolean
         default: false
-  # После первого успешного релиза включите автодеплой из main,
-  # раскомментировав две строки ниже (второй ключ `on:` не нужен):
-  # push:
-  #   branches: [main]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
