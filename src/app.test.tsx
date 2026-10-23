@@ -228,7 +228,7 @@ describe('SavedVariables import (UI)', () => {
     expect(html).toContain('Thalorien')
     expect(html).toContain('Гордунни')
     expect(html).toContain('Silvermoon')
-    expect(html).toContain('воспоминаний: 10')
+    expect(html).toContain('воспоминаний: 11')
   })
 
   it('CharacterPicker in English mirrors the Russian view', () => {
@@ -246,7 +246,7 @@ describe('SavedVariables import (UI)', () => {
       />
     )
     expect(html).toContain('Choose a character')
-    expect(html).toContain('10 memories')
+    expect(html).toContain('11 memories')
     expect(html).toContain('2 favorite(s)')
   })
 
@@ -256,7 +256,7 @@ describe('SavedVariables import (UI)', () => {
     const journal = buildJournalFromSavedVariables(sv, aelirienKey)
     if (!journal) throw new Error('journal must build')
     expect(journal.character.name).toBe('Аэлириэн')
-    expect(journal.memories).toHaveLength(10)
+    expect(journal.memories).toHaveLength(11)
 
     const html = renderToString(
       <Book
@@ -265,19 +265,31 @@ describe('SavedVariables import (UI)', () => {
         onLangChange={() => undefined}
         onBack={() => undefined}
         journal={journal}
-        meta={{ kind: 'savedvariables' as const, schema: sv.schemaVersion, memories: 10 }}
+        meta={{ kind: 'savedvariables' as const, schema: sv.schemaVersion, memories: 11 }}
       />
     )
     // manual texts survive verbatim (newlines and quotes included)
     expect(html).toContain('Первая ночь в Тирисфале')
     expect(html).toContain('Первая запись.')
     expect(html).toContain('Табличка на мосту')
+    // derived automatic-event text is localized like the addon's own export
+    expect(html).toContain('Открыта зона: Tirisfal Glades')
+    expect(html).toContain('Пал в бою — Worgen Packleader')
+    expect(html).toContain('Последний удар: Rake.')
+    expect(html).toContain('Достигнут 6-й уровень')
+    expect(html).toContain('Выполнено заданий: 25')
+    expect(html).toContain('Вход в подземелье: The Deadmines')
     // known types get RU labels; the unknown type keeps its own text
     expect(html).toContain('Зона открыта')
     expect(html).toContain('Смерть')
     expect(html).toContain('Новый уровень')
     expect(html).toContain('PVP DUEL')
-    // SavedVariables has no level/race/class/quests/play time — no fake zeros
+    // equal timestamps keep the import order in the rendered book
+    expect(html.indexOf('Выполнено заданий: 25')).toBeLessThan(
+      html.indexOf('Открыта зона: Western Plaguelands')
+    )
+    // SavedVariables has no live level/race/class/quests/play time — no fake
+    // zeros, and the recoveredHistory snapshot is not shown as current stats
     expect(html).not.toContain('Квестов выполнено')
     expect(html).not.toContain('Времени в игре')
     expect(html).not.toContain('Уровень</span>')
@@ -316,6 +328,6 @@ describe('SavedVariables import (UI)', () => {
     if (sv.status !== 'ok') throw new Error('fixture must parse')
     const journal = buildJournalFromSavedVariables(sv, aelirienKey)
     expect(journal).not.toBeNull()
-    expect(journal?.memories.length).toBe(10)
+    expect(journal?.memories.length).toBe(11)
   })
 })

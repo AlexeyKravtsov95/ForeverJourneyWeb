@@ -92,12 +92,18 @@ function isManualEntry(memory: JournalMemory): boolean {
  */
 const SYSTEM_TYPES = new Set([
   'zone',
+  'zone_discovered',
+  'zone_discovery',
   'death',
   'level',
+  'level_up',
   'victory',
+  'boss_victory',
   'instance',
+  'instance_entered',
   'memory',
   'quest',
+  'quest_milestone',
   'achievement',
 ])
 const SYSTEM_SOURCES = new Set([

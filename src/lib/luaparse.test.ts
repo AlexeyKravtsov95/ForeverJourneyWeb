@@ -168,6 +168,52 @@ describe('limits', () => {
   })
 })
 
+describe('dangerous keys', () => {
+  it('stores __proto__/constructor/prototype as plain own fields, no prototype pollution', () => {
+    const globals = ok(
+      'X = { ["__proto__"] = { ["evil"] = 1 }, ["constructor"] = "c", ["prototype"] = 2, ["toString"] = "not a function" }\nY = 1'
+    )
+    const table = globals.X as Record<string, unknown> & { __proto__?: unknown; toString?: unknown }
+    // own data properties, not inherited members and not the Object.prototype
+    expect(table.__proto__).toMatchObject({ evil: 1 })
+    expect(table.constructor).toBe('c')
+    expect(table.prototype).toBe(2)
+    expect(typeof table.toString).toBe('string')
+    // Object.prototype is untouched
+    expect(({} as Record<string, unknown>).evil).toBeUndefined()
+    expect(({} as Record<string, unknown>).constructor).toBe(Object)
+    expect(Object.getPrototypeOf(table)).toBeNull()
+  })
+
+  it('parses a top-level __proto__ global without touching the prototype chain', () => {
+    const globals = ok('__proto__ = { ["polluted"] = true }')
+    expect(globals.__proto__).toMatchObject({ polluted: true })
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    expect(Object.getPrototypeOf(globals)).toBeNull()
+  })
+
+  it('accepts __proto__ as a bare identifier key and keeps it an own field', () => {
+    const globals = ok('T = { __proto__ = 7, plain = "x" }')
+    expect(globals.T).toMatchObject({ __proto__: 7, plain: 'x' })
+    expect(({} as Record<string, unknown>).__proto__).toBe(Object.prototype)
+  })
+
+  it('never surfaces inherited Object members as table fields', () => {
+    const globals = ok('E = { }')
+    const empty = globals.E as Record<string, unknown>
+    expect(empty.toString).toBeUndefined()
+    expect(empty.hasOwnProperty).toBeUndefined()
+    expect('constructor' in empty).toBe(false)
+    expect(Object.keys(empty)).toEqual([])
+  })
+
+  it('executes nothing: a Lua chunk that would call the parser stays a parse error', () => {
+    // if the parser ever switched to an executing implementation, this file
+    // would have to run code to parse — it must stay rejected instead
+    expect(fails('local mt = { __index = _G }\nsetmetatable({}, mt)').code).toBe('PARSE_ERROR')
+  })
+})
+
 describe('luaToArray', () => {
   it('collects the array part in order and ignores named keys', () => {
     const globals = ok('M = { [1] = "a", [2] = "b", [3] = "c", ["named"] = "x" }')

@@ -35,7 +35,7 @@ describe('buildChapters', () => {
     expect(chapters[1].label).toBe('July 2026')
   })
 
-  it('sorts inside a chapter by timestamp then title', () => {
+  it('keeps the imported order for memories with equal timestamps', () => {
     const chapters = buildChapters(
       [
         memory({ title: 'b', timestamp: JUNE + 1000 }),
@@ -46,7 +46,8 @@ describe('buildChapters', () => {
       'Undated memories'
     )
     expect(chapters).toHaveLength(1)
-    expect(chapters[0].memories.map((m) => m.title)).toEqual(['first', 'a', 'b'])
+    // stable sort: 'b' stays before 'a' exactly as the import ordered them
+    expect(chapters[0].memories.map((m) => m.title)).toEqual(['first', 'b', 'a'])
   })
 
   it('puts undated memories into a single trailing chapter with the localized label', () => {

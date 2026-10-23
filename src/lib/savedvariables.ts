@@ -3,13 +3,12 @@
 // safe literal parser (./luaparse) and one character's journal is converted
 // into the same FJJOURNAL v1 model the Book Creator already renders.
 //
-// What the addon stores is raw event data: the polished titles/descriptions
-// the in-game journal shows are computed at runtime by ViewModel.lua and are
-// NOT part of SavedVariables. This converter therefore never invents them —
-// it keeps whatever text the file actually carries (memory.title/description,
-// data.title/data.note of manual entries, personalNote) and leaves the rest
-// empty. Known event types get a proper RU/EN label; unknown types keep their
-// original text.
+// The addon stores raw event data; the display text of automatic events is
+// computed at runtime by Memories.lua from that data. deriveEventText() below
+// rebuilds it from the verified data fields using the addon's own template
+// shapes (so RU localization keeps working through localize.ts). Whatever the
+// file does not carry is left empty — names, levels, causes and spells are
+// never invented, and the player's own text is always kept verbatim.
 import {
   luaToArray,
   parseLuaAssignments,
@@ -23,6 +22,7 @@ import {
   toTimestamp,
   type Journal,
   type JournalMemory,
+  type RecoveredHistory,
 } from './journal'
 
 export { MAX_FILE_BYTES } from './luaparse'
@@ -127,19 +127,122 @@ function isMemoryRecord(value: LuaValue): value is LuaTable {
   return typeof value === 'object' && value !== null
 }
 
+/**
+ * Rebuilds the display text of automatic events from `memory.data` the same
+ * way the addon's Memories.lua does at runtime. Only the template shapes the
+ * real addon produces are used (they match the RU dictionaries in
+ * src/lib/localize.ts, which then translate these exact strings); parameter
+ * values are taken verbatim from the file and never invented — when the data
+ * is missing, nothing is derived and the neutral type label is all the book
+ * shows. Verified fields per review of the actual addon:
+ * ZONE data.zoneName/location.name, LEVEL data.level, INSTANCE
+ * data.instanceName/location.name, DEATH data.killerName/killerNameRaw plus
+ * the killing-spell field when present.
+ */
+function deriveEventText(
+  type: string,
+  data: LuaTable | null,
+  location: LuaValue
+): { title: string; description: string } {
+  const upper = type.trim().toUpperCase()
+  const field = (name: string): string => {
+    const text = data ? asText(data[name]) : ''
+    return text.trim()
+  }
+  const place = (...names: string[]): string => {
+    for (const name of names) {
+      const text = field(name)
+      if (text) return text
+    }
+    return locationText(location).trim()
+  }
+  const count = (...names: string[]): number | undefined => {
+    for (const name of names) {
+      const value = data ? data[name] : undefined
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) return value
+    }
+    return undefined
+  }
+  const killingSpell = (): string => field('spellName') || field('spell') || field('finalBlow')
+  const none = { title: '', description: '' }
+
+  switch (upper) {
+    case 'ZONE':
+    case 'ZONE_DISCOVERED':
+    case 'ZONE_DISCOVERY': {
+      const zone = place('zoneName', 'zone')
+      return zone
+        ? { title: `Discovered ${zone}`, description: 'A new place became part of your journey.' }
+        : none
+    }
+    case 'LEVEL':
+    case 'LEVEL_UP': {
+      const level = count('level')
+      return level !== undefined
+        ? { title: `Reached Level ${level}`, description: `Reached level ${level}.` }
+        : none
+    }
+    case 'INSTANCE':
+    case 'INSTANCE_ENTERED': {
+      const instance = place('instanceName', 'instance')
+      return instance
+        ? {
+            title: `Entered ${instance}`,
+            description: 'Another chapter of your journey lies within.',
+          }
+        : none
+    }
+    case 'DEATH': {
+      const enemy = field('killerName') || field('killerNameRaw')
+      if (!enemy) return none // environmental deaths have no confirmed template
+      const spell = killingSpell()
+      return {
+        title: `Fell in battle — ${enemy}`,
+        description: spell ? `Final blow: ${spell}.` : 'Every journey has its setbacks.',
+      }
+    }
+    case 'QUEST':
+    case 'QUEST_MILESTONE': {
+      const quests = count('quests', 'questCount', 'completedQuests', 'count')
+      return quests !== undefined
+        ? {
+            title: `${quests} quests completed`,
+            description: 'Another important questing milestone has been reached.',
+          }
+        : none
+    }
+    case 'VICTORY':
+    case 'BOSS_VICTORY': {
+      // the boss-name title template is not confirmed — only the type's own
+      // description constants are restored, boss/spell names stay verbatim
+      const spell = killingSpell()
+      return {
+        title: '',
+        description: spell ? `Final blow: ${spell}.` : 'The battle ended in victory.',
+      }
+    }
+    default:
+      return none
+  }
+}
+
 function toMemory(record: LuaTable): JournalMemory | null {
   const type = asText(record.type)
   const source = asText(record.source)
   const data = asTable(record.data)
   const timestamp = toTimestamp(record.timestamp)
 
-  // Manual entries carry their text in data.title / data.note; automatic
-  // events may carry a precomputed title/description if a future addon
-  // version chooses to store one — both are honored, nothing is invented.
+  // Priority: text actually saved in the file (memory.title/description, and
+  // data.title/data.note of manual entries) > event text derived from
+  // verified data fields > nothing (the neutral type label carries the entry).
   const manual =
     type.trim().toUpperCase() === 'MANUAL_MEMORY' || source.trim().toUpperCase() === 'USER'
-  const title = asText(record.title) || (manual && data ? asText(data.title) : '')
-  const description = asText(record.description) || (manual && data ? asText(data.note) : '')
+  const derived = manual
+    ? { title: '', description: '' }
+    : deriveEventText(type, data, record.location)
+  const title = asText(record.title) || (manual && data ? asText(data.title) : '') || derived.title
+  const description =
+    asText(record.description) || (manual && data ? asText(data.note) : '') || derived.description
 
   if (!type && !title && !description && !asText(record.personalNote)) return null
 
@@ -279,7 +382,36 @@ export function buildJournalFromSavedVariables(
     journey: {
       ...(startedAt !== undefined ? { startedAt } : {}),
       ...(deaths > 0 || declaredDeaths !== undefined ? { deaths } : {}),
+      ...parseRecoveredHistory(record.recoveredHistory),
     },
     memories: ordered,
   }
+}
+
+/**
+ * `character.recoveredHistory` is a snapshot captured when the addon first saw
+ * the character — historical, not live. Its values are preserved in the model
+ * but must never be shown as current stats (the book leaves the
+ * quests/play-time tiles hidden). Only fields actually present and numeric
+ * are treated as known; `initialized` alone carries no numbers and is not
+ * stored.
+ */
+function parseRecoveredHistory(value: LuaValue): { recovered?: RecoveredHistory } {
+  const table = asTable(value)
+  if (!table) return {}
+  const capturedAt = toTimestamp(table.capturedAt)
+  const completedQuests = asCount(asTable(table.completedQuests)?.count)
+  const playedTotal = asCount(asTable(table.played)?.total)
+  const levelRaw = table.level
+  const level =
+    typeof levelRaw === 'number' && Number.isInteger(levelRaw) && levelRaw > 0
+      ? levelRaw
+      : undefined
+  const known = {
+    ...(capturedAt !== undefined ? { capturedAt } : {}),
+    ...(completedQuests !== undefined ? { completedQuests } : {}),
+    ...(playedTotal !== undefined ? { playedTotal } : {}),
+    ...(level !== undefined ? { level } : {}),
+  }
+  return Object.keys(known).length > 0 ? { recovered: known } : {}
 }

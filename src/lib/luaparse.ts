@@ -20,6 +20,19 @@ export const MAX_STRING_BYTES = 1024 * 1024
 export type LuaTable = { [key: string]: LuaValue }
 export type LuaValue = string | number | boolean | LuaTable
 
+/**
+ * Tables and globals are dictionaries without a prototype. A plain `{}` would
+ * let hostile keys poison the chain: `X = { ["__proto__"] = {...} }` would
+ * write through the `__proto__` setter, and reads of `toString`/`constructor`
+ * would surface inherited Object properties as phantom fields. On a
+ * null-prototype object every key — including `__proto__`, `constructor` and
+ * `prototype` — is a plain own data property, and inherited members simply do
+ * not exist.
+ */
+function newTable(): LuaTable {
+  return Object.create(null) as LuaTable
+}
+
 export type LuaParseErrorCode =
   | 'EMPTY_INPUT'
   | 'FILE_TOO_LARGE'
@@ -76,7 +89,7 @@ class Parser {
     ) {
       this.pos = 3
     }
-    const globals: Record<string, LuaValue> = {}
+    const globals: Record<string, LuaValue> = newTable()
     this.skipSpace()
     while (this.pos < this.src.length) {
       const name = this.readIdentifier()
@@ -143,7 +156,7 @@ class Parser {
   private readTable(depth: number): LuaTable {
     if (depth >= MAX_DEPTH) this.failCode('TOO_DEEP')
     this.pos++ // consume '{'
-    const table: LuaTable = {}
+    const table: LuaTable = newTable()
     let fields = 0
     let nextIndex = 1
     for (;;) {

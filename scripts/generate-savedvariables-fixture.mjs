@@ -78,7 +78,7 @@ const aelirienMemories = [
     source: 'RECORDED',
     timestamp: 1_741_200_000,
     location: 'Тирисфальские леса',
-    data: { zone: 'Tirisfal Glades' },
+    data: { zoneName: 'Tirisfal Glades' }, // confirmed field name (Memories.lua)
   }),
   memory({
     type: 'MANUAL_MEMORY',
@@ -97,7 +97,7 @@ const aelirienMemories = [
     source: 'RECORDED',
     timestamp: 1_741_290_000,
     location: 'Серебряный бор',
-    data: { enemy: 'Worgen Packleader' },
+    data: { killerName: 'Worgen Packleader', killerNameRaw: 'Worgen Packleader', spellName: 'Rake' },
   }),
   memory({
     type: 'LEVEL',
@@ -124,12 +124,20 @@ const aelirienMemories = [
     location: 'Тирисфальские леса',
     data: { quests: 25 },
   }),
+  // zone without data.zoneName — the title falls back to location.name,
+  // and location itself is the table shape some event handlers store
   memory({
     type: 'ZONE',
     source: 'RECORDED',
     timestamp: 1_741_400_000,
-    location: 'Западные Чумные земли',
-    data: { zone: 'Western Plaguelands' },
+    location: { name: 'Western Plaguelands', map: 'Kalimdor' },
+  }),
+  memory({
+    type: 'INSTANCE',
+    source: 'RECORDED',
+    timestamp: 1_741_420_000,
+    location: 'Мертвые копи',
+    data: { instanceName: 'The Deadmines' },
   }),
   memory({
     type: 'PVP_DUEL', // unknown type for the importer — must keep its own text
@@ -141,14 +149,15 @@ const aelirienMemories = [
     data: { opponent: 'Рогнар', result: 'win' },
     title: 'Победа в дуэли: Рогнар',
   }),
-  // future-proof: a memory that already carries computed display text
+  // future-proof: a memory that already carries computed display text —
+  // saved text always wins over anything derived from data
   memory({
     type: 'VICTORY',
     source: 'RECORDED',
     timestamp: 1_741_500_000,
     location: 'Мертвые копи',
-    data: { instance: 'The Deadmines', boss: 'VanCleef', finalBlow: 'Pyroblast' },
-    title: 'Entered The Deadmines',
+    data: { bossName: 'VanCleef', finalBlow: 'Pyroblast' },
+    title: 'Victory in the Deadmines',
     description: 'The battle ended in victory.',
   }),
   // undated entry: no timestamp at all
@@ -166,7 +175,7 @@ const thalorienMemories = [
     source: 'RECORDED',
     timestamp: 1_742_700_000,
     location: 'Eversong Woods',
-    data: { zone: 'Eversong Woods' },
+    data: { zoneName: 'Eversong Woods' },
   }),
   memory({
     type: 'LEVEL',
@@ -175,6 +184,8 @@ const thalorienMemories = [
     location: 'Eversong Woods',
     data: { level: 12 },
   }),
+  // achievement with no confirmed display template: no derived text,
+  // the neutral type label carries the entry
   memory({
     type: 'ACHIEVEMENT',
     source: 'RECORDED',
@@ -190,7 +201,15 @@ const mainDb = {
     'Гордунни:Аэлириэн': {
       createdAt: 1_741_199_000,
       stats: { deaths: 1 },
-      recoveredHistory: { migrated: true, sourceAddon: '1.0.0' },
+      // historical snapshot captured when the addon first saw the character
+      // (schema v3): kept, but never shown as current stats
+      recoveredHistory: {
+        initialized: true,
+        capturedAt: 1_741_199_000,
+        level: 1,
+        completedQuests: { count: 3 },
+        played: { total: 7200 },
+      },
       memories: indexed(aelirienMemories),
     },
     'Гордунни:Мрограмар': {
