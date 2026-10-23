@@ -16,47 +16,49 @@ import { formatDate } from './format'
 const TYPE_LABELS_RU: Record<string, string> = {
   zone: 'Зона',
   'zone discovered': 'Зона открыта',
+  discovery: 'ОТКРЫТИЕ',
   death: 'Смерть',
-  level: 'Уровень',
+  level: 'УРОВЕНЬ',
   'level up': 'Новый уровень',
   victory: 'Победа',
   instance: 'Подземелье',
-  memory: 'Воспоминание',
-  'quest milestone': 'Этап заданий',
+  memory: 'ВОСПОМИНАНИЕ',
+  'quest milestone': 'ВЕХА ЗАДАНИЙ',
   achievement: 'Достижение',
-  'profession milestone': 'Этап профессии',
+  profession: 'ПРОФЕССИЯ',
   'reputation milestone': 'Этап репутации',
   'journal entry': 'Запись в дневнике',
 }
 
 /** Addon-generated descriptions, matched exactly (after trimming). */
 const DESCRIPTIONS_RU: Record<string, string> = {
-  'A new place became part of your journey.': 'Новое место стало частью твоего путешествия.',
+  'A new place became part of your journey.': 'Новое место стало частью твоего пути.',
   'Your journey continues.': 'Путешествие продолжается.',
-  'The battle ended in victory.': 'Битва завершилась победой.',
-  'Every journey has its setbacks.': 'На пути каждого героя случаются поражения.',
+  'The battle ended in victory.': 'Сражение завершилось победой.',
+  'Every journey has its setbacks.': 'Даже поражения становятся частью истории.',
   'Reached the level cap.': 'Достигнут максимальный уровень.',
-  'Another chapter of your journey lies within.': 'Впереди новая глава твоего путешествия.',
+  'Another chapter of your journey lies within.': 'Впереди ещё одна глава путешествия.',
   'Another important questing milestone has been reached.':
-    'Достигнут ещё один важный этап выполнения заданий.',
+    'Достигнута новая важная веха в путешествии.',
   'A new profession became part of the journey.': 'Новая профессия стала частью путешествия.',
-  'A new profession milestone has been reached.': 'Достигнут новый этап профессии.',
+  'A new profession milestone has been reached.': 'Достигнута новая профессиональная веха.',
 }
 
 /**
- * Addon-generated titles without a parameter, matched exactly: the
- * environmental death titles (Memories.lua ENVIRONMENT_TITLE_KEYS), the
- * generic "Fell in battle" fallback and the boss "Unknown boss" fallback
+ * Addon-generated titles without a parameter, matched exactly: the literal
+ * environmental death titles (Memories.lua ENVIRONMENT_TITLE_KEYS), their
+ * unknown-cause and generic fallbacks, and the boss "Unknown boss" fallback
  * (BossVictoryMilestones.lua).
  */
 const EXACT_TITLES_RU: Record<string, string> = {
   'Fell in battle': 'Пал в бою',
   Drowned: 'Утонул',
-  'Fell from a great height': 'Упал с большой высоты',
-  'Succumbed to fatigue': 'Изнемог от усталости',
-  'Burned to death': 'Сгорел заживо',
-  'Consumed by lava': 'Погиб в лаве',
-  'Dissolved in slime': 'Растворился в слизи',
+  'Died from a fall': 'Погиб при падении',
+  'Succumbed to exhaustion': 'Погиб от истощения',
+  'Perished in fire': 'Погиб в огне',
+  'Perished in lava': 'Погиб в лаве',
+  'Perished in slime': 'Погиб в слизи',
+  'Lost to the environment': 'Погиб из-за окружения',
   'Unknown boss': 'Неизвестный босс',
 }
 
@@ -67,16 +69,15 @@ const EXACT_TITLES_RU: Record<string, string> = {
  * template around it is translated.
  */
 const TITLE_PATTERNS_RU: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
-  [/^Discovered (.+)$/, (m) => `Открыта зона: ${m[1]}`],
+  [/^Discovered (.+)$/, (m) => `Открыта локация: ${m[1]}`],
   [/^Fell in battle — (.+)$/, (m) => `Пал в бою — ${m[1]}`],
-  // masculine ordinal is «-й» for every integer: 1-й, 3-й, 11-й, 21-й, 100-й
-  [/^Reached Level (\d+)$/, (m) => `Достигнут ${m[1]}-й уровень`],
+  [/^Reached Level (\d+)$/, (m) => `Уровень повышен до ${m[1]}`],
   [/^Entered (.+)$/, (m) => `Вход в подземелье: ${m[1]}`],
-  [/^(\d+) quests completed$/, (m) => `Выполнено заданий: ${m[1]}`],
+  [/^(\d+) quests completed$/, (m) => `Выполнено ${m[1]} заданий`],
   [/^Level (\d+)$/, (m) => `Уровень ${m[1]}`],
   // ProfessionMilestones.lua templates
   [/^Learned profession: (.+)$/, (m) => `Изучена профессия: ${m[1]}`],
-  [/^(.+) reached skill (\d+)$/, (m) => `${m[1]}: навык ${m[2]}`],
+  [/^(.+) reached skill (\d+)$/, (m) => `${m[1]}: навык повышен до ${m[2]}`],
 ]
 
 /** Addon-generated descriptions with a parameter, e.g. "Final blow: Pyroblast." */

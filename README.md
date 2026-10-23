@@ -22,13 +22,20 @@
   литералы: таблицы, строки с escape-последовательностями, числа, булевы; всё остальное
   отклоняется). Затем выбирается один персонаж (`Realm:Name` — журналы разных персонажей
   не объединяются), и его воспоминания конвертируются в ту же модель `FJJOURNAL v1`.
-  Заголовки/описания автоматических событий воспроизводят реальные
-  Lua-обработчики аддона: шаблоны `Memories.lua` (включая точные заголовки
-  экологических смертей из `ENVIRONMENT_TITLE_KEYS` и общий «Fell in battle»/
-  «Пал в бою»), `BossVictoryMilestones.lua` (`encounterName`, фолбэк
-  «Unknown boss»/«Неизвестный босс», фиксированное описание победы) и
-  `ProfessionMilestones.lua` (`data.kind`: LEARNED «Learned profession: …»/
-  «Изучена профессия: …», MILESTONE «… reached skill N»/«…: навык N»).
+  Заголовки/описания автоматических событий буквально воспроизводят строки
+  `Locale.lua` реальных обработчиков: `Memories.lua` (точные заголовки
+  экологических смертей из `ENVIRONMENT_TITLE_KEYS` — «Died from a fall»/
+  «Погиб при падении», «Drowned»/«Утонул», «Succumbed to exhaustion»/
+  «Погиб от истощения», «Perished in fire/lava/slime»/«Погиб в огне/лаве/
+  слизи»; фолбэки «Lost to the environment»/«Погиб из-за окружения» и
+  «Fell in battle»/«Пал в бою»; причина окружения проверяется раньше
+  `killerName`, как в аддоне), `BossVictoryMilestones.lua` (`encounterName`,
+  фолбэк «Unknown boss»/«Неизвестный босс», фиксированное «Сражение
+  завершилось победой.») и `ProfessionMilestones.lua` (`data.kind`: LEARNED
+  «Learned profession: …»/«Изучена профессия: …», MILESTONE «… reached
+  skill N»/«…: навык повышен до N», число — `tonumber(milestone)` →
+  `tonumber(skillLevel)` → 0). Метки типов — DISCOVERY/ОТКРЫТИЕ,
+  LEVEL/УРОВЕНЬ, ВЕХА ЗАДАНИЙ, PROFESSION/ПРОФЕССИЯ, MEMORY/ВОСПОМИНАНИЕ.
   Непроверенные данные (имена, уровни, причины, заклинания) не выдумываются
   (`spellID` без `spellName` не превращается в название), авторский текст не
   переводится. Соответствие конвертера обработчикам зафиксировано эталонной

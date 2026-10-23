@@ -181,9 +181,9 @@ describe('manual memory markers (web preview)', () => {
     )
     expect(html).toContain('Reached Level 20') // manual title kept
     expect(html).toContain('Your journey continues.') // manual description kept
-    expect(html).toContain('Достигнут 20-й уровень') // recorded twin translated
+    expect(html).toContain('Уровень повышен до 20') // recorded twin translated
     expect(html).toContain('Достигнут уровень 20.')
-    expect(html).toContain('Воспоминание') // MEMORY type label in RU
+    expect(html).toContain('ВОСПОМИНАНИЕ') // MEMORY type label in RU
   })
 
   it('EN preview keeps everything as imported', () => {
@@ -273,30 +273,30 @@ describe('SavedVariables import (UI)', () => {
     expect(html).toContain('Первая запись.')
     expect(html).toContain('Табличка на мосту')
     // derived automatic-event text is localized like the addon's own export
-    expect(html).toContain('Открыта зона: Tirisfal Glades')
+    expect(html).toContain('Открыта локация: Tirisfal Glades')
     expect(html).toContain('Пал в бою — Worgen Packleader')
     expect(html).toContain('Последний удар: Rake.')
     expect(html).toContain('Утонул') // environmental death: ENVIRONMENT_TITLE_KEYS
-    expect(html).toContain('Достигнут 6-й уровень')
+    expect(html).toContain('Уровень повышен до 6')
     expect(html).toContain('Путешествие продолжается.') // MEMORY_DESCRIPTION_LEVEL
-    expect(html).toContain('Выполнено заданий: 25')
+    expect(html).toContain('Выполнено 25 заданий')
     expect(html).toContain('Вход в подземелье: The Deadmines')
     // boss victory: encounter name verbatim, fixed localized description
     expect(html).toContain('Edwin VanCleef')
-    expect(html).toContain('Битва завершилась победой.')
+    expect(html).toContain('Сражение завершилось победой.')
     expect(html).not.toContain('Последний удар: Pyroblast.')
     // profession milestones of both kinds
     expect(html).toContain('Изучена профессия: Алхимия')
-    expect(html).toContain('Алхимия: навык 150')
-    expect(html).toContain('Этап профессии')
-    // known types get RU labels; the unknown type keeps its own text
-    expect(html).toContain('Зона открыта')
+    expect(html).toContain('Алхимия: навык повышен до 150')
+    expect(html).toContain('ПРОФЕССИЯ')
+    // known types get the addon's RU labels; the unknown type keeps its own text
+    expect(html).toContain('ОТКРЫТИЕ')
     expect(html).toContain('Смерть')
-    expect(html).toContain('Новый уровень')
+    expect(html).toContain('УРОВЕНЬ')
     expect(html).toContain('PVP DUEL')
     // equal timestamps keep the import order in the rendered book
-    expect(html.indexOf('Выполнено заданий: 25')).toBeLessThan(
-      html.indexOf('Открыта зона: Western Plaguelands')
+    expect(html.indexOf('Выполнено 25 заданий')).toBeLessThan(
+      html.indexOf('Открыта локация: Western Plaguelands')
     )
     // SavedVariables has no live level/race/class/quests/play time — no fake
     // zeros, and the recoveredHistory snapshot is not shown as current stats

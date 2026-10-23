@@ -134,7 +134,7 @@ describe('journal conversion', () => {
     // ZONE: data.zoneName
     expect(byTitle('Discovered Tirisfal Glades')).toMatchObject({
       source: 'RECORDED',
-      typeLabel: 'Zone discovered',
+      typeLabel: 'DISCOVERY',
       description: 'A new place became part of your journey.',
     })
     // ZONE without data.zoneName falls back to location.name
@@ -176,13 +176,14 @@ describe('journal conversion', () => {
     const learned = journal?.memories.filter((m) => m.type === 'PROFESSION_MILESTONE')
     expect(learned).toHaveLength(2)
     expect(learned?.[0]).toMatchObject({
-      typeLabel: 'Profession milestone',
+      typeLabel: 'PROFESSION',
       title: 'Learned profession: Алхимия',
       description: 'A new profession became part of the journey.',
     })
-    // …MILESTONE adds the skill level reached
+    // …MILESTONE prefers data.milestone over data.skillLevel (tonumber order)
     expect(learned?.[1]).toMatchObject({
-      title: 'Алхимия reached skill 150',
+      typeLabel: 'PROFESSION',
+      title: 'Алхимия reached skill 150', // milestone = 150 wins over skillLevel = 160
       description: 'A new profession milestone has been reached.',
     })
   })
@@ -204,8 +205,9 @@ describe('journal conversion', () => {
     expect(journal?.memories[0]).toMatchObject({ title: 'Своё название', description: 'Своё описание' })
   })
 
-  it('every death gets the addon title: exact environmental keys or the generic fallback', () => {
-    // an unknown environmental type is an unknown cause → generic title
+  it('every death gets the addon title: exact environmental keys or the fallbacks', () => {
+    // an unknown environmental type has its own fallback title, and deaths
+    // without any known cause get the generic one
     const source = [
       'ForeverJourneyDB = {',
       '\t["schemaVersion"] = 3,',
@@ -215,22 +217,25 @@ describe('journal conversion', () => {
       '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { ["cause"] = "ENVIRONMENTAL", ["environmentalType"] = "QUICKSAND" } },',
       '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { } },',
       '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { ["spellID"] = 12345 } },',
+      '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { ["cause"] = "ENVIRONMENTAL", ["environmentalType"] = "LAVA", ["killerName"] = "Murloc" } },',
       '\t\t\t},',
       '\t\t},',
       '\t},',
       '}',
     ].join('\n')
     const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
-    expect(journal?.memories).toHaveLength(3)
+    expect(journal?.memories).toHaveLength(4)
+    const titles = journal?.memories.map((m) => m.title)
+    expect(titles).toEqual(['Lost to the environment', 'Fell in battle', 'Fell in battle', 'Perished in lava'])
     for (const memory of journal?.memories ?? []) {
-      expect(memory.title).toBe('Fell in battle')
       expect(memory.description).toBe('Every journey has its setbacks.')
     }
   })
 
   it('derives nothing when the data is missing, unknown or has no confirmed template', () => {
-    // an empty zone, a non-numeric level, an unknown profession kind and an
-    // achievement with no template — none of these may produce invented text
+    // an empty zone, a non-numeric level, an unknown profession kind and a
+    // profession without a name — none of these may produce invented text;
+    // the MILESTONE number defaulting to 0 is addon behavior, not invention
     const source = [
       'ForeverJourneyDB = {',
       '\t["schemaVersion"] = 3,',
@@ -240,7 +245,7 @@ describe('journal conversion', () => {
       '\t\t\t\t{ ["type"] = "ZONE", ["data"] = { } },',
       '\t\t\t\t{ ["type"] = "LEVEL", ["data"] = { ["level"] = "many" } },',
       '\t\t\t\t{ ["type"] = "PROFESSION_MILESTONE", ["data"] = { ["kind"] = "MYSTERY" } },',
-      '\t\t\t\t{ ["type"] = "PROFESSION_MILESTONE", ["data"] = { ["kind"] = "MILESTONE", ["professionName"] = "Fishing", ["skillLevel"] = "high" } },',
+      '\t\t\t\t{ ["type"] = "PROFESSION_MILESTONE", ["data"] = { ["kind"] = "MILESTONE", ["skillLevel"] = 90 } },',
       '\t\t\t},',
       '\t\t},',
       '\t},',
@@ -266,35 +271,35 @@ describe('journal conversion', () => {
       return localizeMemory(memory, 'ru')
     }
     expect(view('Discovered Tirisfal Glades')).toMatchObject({
-      title: 'Открыта зона: Tirisfal Glades',
-      description: 'Новое место стало частью твоего путешествия.',
+      title: 'Открыта локация: Tirisfal Glades',
+      description: 'Новое место стало частью твоего пути.',
     })
     expect(view('Fell in battle — Worgen Packleader')).toMatchObject({
       title: 'Пал в бою — Worgen Packleader',
       description: 'Последний удар: Rake.',
     })
     expect(view('Reached Level 6')).toMatchObject({
-      title: 'Достигнут 6-й уровень',
+      title: 'Уровень повышен до 6',
       description: 'Путешествие продолжается.',
     })
     expect(view('25 quests completed')).toMatchObject({
-      title: 'Выполнено заданий: 25',
-      description: 'Достигнут ещё один важный этап выполнения заданий.',
+      title: 'Выполнено 25 заданий',
+      description: 'Достигнута новая важная веха в путешествии.',
     })
     expect(view('Entered The Deadmines')).toMatchObject({
       title: 'Вход в подземелье: The Deadmines',
-      description: 'Впереди новая глава твоего путешествия.',
+      description: 'Впереди ещё одна глава путешествия.',
     })
     // environmental death title comes from ENVIRONMENT_TITLE_KEYS, exact RU
     expect(view('Drowned')).toMatchObject({
       title: 'Утонул',
-      description: 'На пути каждого героя случаются поражения.',
+      description: 'Даже поражения становятся частью истории.',
     })
     // boss encounter name stays verbatim; the description is the fixed string
     expect(view('Edwin VanCleef')).toMatchObject({
       typeLabel: 'Победа',
       title: 'Edwin VanCleef',
-      description: 'Битва завершилась победой.',
+      description: 'Сражение завершилось победой.',
     })
     // profession templates of both kinds
     expect(view('Learned profession: Алхимия')).toMatchObject({
@@ -302,8 +307,8 @@ describe('journal conversion', () => {
       description: 'Новая профессия стала частью путешествия.',
     })
     expect(view('Алхимия reached skill 150')).toMatchObject({
-      title: 'Алхимия: навык 150',
-      description: 'Достигнут новый этап профессии.',
+      title: 'Алхимия: навык повышен до 150',
+      description: 'Достигнута новая профессиональная веха.',
     })
     // authored titles of manual notes and unknown types stay verbatim
     expect(view('Победа в дуэли: Рогнар').title).toBe('Победа в дуэли: Рогнар')

@@ -168,7 +168,8 @@ const aelirienMemories = [
     data: { encounterName: 'Edwin VanCleef' },
   }),
   // profession milestones (ProfessionMilestones.lua): data.kind selects the
-  // template — LEARNED names the profession, MILESTONE adds the skill level
+  // template; the MILESTONE number prefers data.milestone over data.skillLevel
+  // (tonumber order in the Lua handler)
   memory({
     type: 'PROFESSION_MILESTONE',
     source: 'RECORDED',
@@ -181,7 +182,13 @@ const aelirienMemories = [
     source: 'RECORDED',
     timestamp: 1_741_700_000,
     location: 'Подгород',
-    data: { kind: 'MILESTONE', professionName: 'Алхимия', skillLine: 'alchemy', skillLevel: 150, milestone: 'Journeyman' },
+    data: {
+      kind: 'MILESTONE',
+      professionName: 'Алхимия',
+      skillLine: 'alchemy',
+      skillLevel: 160,
+      milestone: 150,
+    },
   }),
   // undated entry: no timestamp at all
   memory({

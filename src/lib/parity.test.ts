@@ -54,20 +54,20 @@ interface ReferenceCase extends RawRecord {
   ru: ExpectedText
 }
 
-/** Memories.lua ENVIRONMENT_TITLE_KEYS — every environmental cause has its own title. */
+/** Memories.lua ENVIRONMENT_TITLE_KEYS — literal Locale.lua titles. */
 const ENVIRONMENTAL_REFERENCE: Array<[string, string, string]> = [
   // [environmentalType, EN title, RU title]
+  ['FALLING', 'Died from a fall', 'Погиб при падении'],
   ['DROWNING', 'Drowned', 'Утонул'],
-  ['FALLING', 'Fell from a great height', 'Упал с большой высоты'],
-  ['FATIGUE', 'Succumbed to fatigue', 'Изнемог от усталости'],
-  ['FIRE', 'Burned to death', 'Сгорел заживо'],
-  ['LAVA', 'Consumed by lava', 'Погиб в лаве'],
-  ['SLIME', 'Dissolved in slime', 'Растворился в слизи'],
+  ['FATIGUE', 'Succumbed to exhaustion', 'Погиб от истощения'],
+  ['FIRE', 'Perished in fire', 'Погиб в огне'],
+  ['LAVA', 'Perished in lava', 'Погиб в лаве'],
+  ['SLIME', 'Perished in slime', 'Погиб в слизи'],
 ]
 
 const SETBACKS = {
   en: 'Every journey has its setbacks.',
-  ru: 'На пути каждого героя случаются поражения.',
+  ru: 'Даже поражения становятся частью истории.',
 }
 
 const ADDON_REFERENCE: ReferenceCase[] = [
@@ -80,12 +80,12 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     en: {
       title: 'Discovered Tirisfal Glades',
       description: 'A new place became part of your journey.',
-      typeLabel: 'Zone discovered',
+      typeLabel: 'DISCOVERY',
     },
     ru: {
-      title: 'Открыта зона: Tirisfal Glades',
-      description: 'Новое место стало частью твоего путешествия.',
-      typeLabel: 'Зона открыта',
+      title: 'Открыта локация: Tirisfal Glades',
+      description: 'Новое место стало частью твоего пути.',
+      typeLabel: 'ОТКРЫТИЕ',
     },
   },
   {
@@ -96,12 +96,12 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     en: {
       title: 'Reached Level 6',
       description: 'Your journey continues.', // MEMORY_DESCRIPTION_LEVEL
-      typeLabel: 'Level up',
+      typeLabel: 'LEVEL',
     },
     ru: {
-      title: 'Достигнут 6-й уровень',
+      title: 'Уровень повышен до 6',
       description: 'Путешествие продолжается.',
-      typeLabel: 'Новый уровень',
+      typeLabel: 'УРОВЕНЬ',
     },
   },
   {
@@ -117,7 +117,7 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     },
     ru: {
       title: 'Вход в подземелье: The Deadmines',
-      description: 'Впереди новая глава твоего путешествия.',
+      description: 'Впереди ещё одна глава путешествия.',
       typeLabel: 'Подземелье',
     },
   },
@@ -155,6 +155,22 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     },
   },
   {
+    name: 'environmental cause wins over killerName (Memories.lua order)',
+    type: 'DEATH',
+    source: 'RECORDED',
+    data: { cause: 'ENVIRONMENTAL', environmentalType: 'DROWNING', killerName: 'Murloc Tidehunter' },
+    en: {
+      title: 'Drowned',
+      description: SETBACKS.en,
+      typeLabel: 'Death',
+    },
+    ru: {
+      title: 'Утонул',
+      description: SETBACKS.ru,
+      typeLabel: 'Смерть',
+    },
+  },
+  {
     name: 'death with only a spellID — no name may be invented',
     type: 'DEATH',
     source: 'RECORDED',
@@ -180,6 +196,14 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     ru: { title: ruTitle, description: SETBACKS.ru, typeLabel: 'Смерть' },
   })),
   {
+    name: 'unknown environmental cause',
+    type: 'DEATH',
+    source: 'RECORDED',
+    data: { cause: 'ENVIRONMENTAL', environmentalType: 'QUICKSAND' },
+    en: { title: 'Lost to the environment', description: SETBACKS.en, typeLabel: 'Death' },
+    ru: { title: 'Погиб из-за окружения', description: SETBACKS.ru, typeLabel: 'Смерть' },
+  },
+  {
     name: 'death without a killer and without an environmental cause',
     type: 'DEATH',
     source: 'RECORDED',
@@ -199,9 +223,9 @@ const ADDON_REFERENCE: ReferenceCase[] = [
       typeLabel: 'Quest milestone',
     },
     ru: {
-      title: 'Выполнено заданий: 25',
-      description: 'Достигнут ещё один важный этап выполнения заданий.',
-      typeLabel: 'Этап заданий',
+      title: 'Выполнено 25 заданий',
+      description: 'Достигнута новая важная веха в путешествии.',
+      typeLabel: 'ВЕХА ЗАДАНИЙ',
     },
   },
   {
@@ -218,7 +242,7 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     },
     ru: {
       title: 'Edwin VanCleef',
-      description: 'Битва завершилась победой.',
+      description: 'Сражение завершилось победой.',
       typeLabel: 'Победа',
     },
   },
@@ -234,7 +258,7 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     },
     ru: {
       title: 'Неизвестный босс',
-      description: 'Битва завершилась победой.',
+      description: 'Сражение завершилось победой.',
       typeLabel: 'Победа',
     },
   },
@@ -247,35 +271,61 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     en: {
       title: 'Learned profession: Алхимия',
       description: 'A new profession became part of the journey.',
-      typeLabel: 'Profession milestone',
+      typeLabel: 'PROFESSION',
     },
     ru: {
       title: 'Изучена профессия: Алхимия',
       description: 'Новая профессия стала частью путешествия.',
-      typeLabel: 'Этап профессии',
+      typeLabel: 'ПРОФЕССИЯ',
     },
   },
   {
-    name: 'profession milestone: skill reached',
+    name: 'profession milestone: tonumber(data.milestone) wins over skillLevel',
     type: 'PROFESSION_MILESTONE',
     source: 'RECORDED',
     location: 'Подгород',
-    data: {
-      kind: 'MILESTONE',
-      professionName: 'Алхимия',
-      skillLine: 'alchemy',
-      skillLevel: 150,
-      milestone: 'Journeyman',
-    },
+    data: { kind: 'MILESTONE', professionName: 'Кузнечное дело', skillLevel: 83, milestone: 75 },
     en: {
-      title: 'Алхимия reached skill 150',
+      title: 'Кузнечное дело reached skill 75',
       description: 'A new profession milestone has been reached.',
-      typeLabel: 'Profession milestone',
+      typeLabel: 'PROFESSION',
     },
     ru: {
-      title: 'Алхимия: навык 150',
-      description: 'Достигнут новый этап профессии.',
-      typeLabel: 'Этап профессии',
+      title: 'Кузнечное дело: навык повышен до 75',
+      description: 'Достигнута новая профессиональная веха.',
+      typeLabel: 'ПРОФЕССИЯ',
+    },
+  },
+  {
+    name: 'profession milestone: skillLevel used when milestone is absent',
+    type: 'PROFESSION_MILESTONE',
+    source: 'RECORDED',
+    data: { kind: 'MILESTONE', professionName: 'Рыбная ловля', skillLevel: 150 },
+    en: {
+      title: 'Рыбная ловля reached skill 150',
+      description: 'A new profession milestone has been reached.',
+      typeLabel: 'PROFESSION',
+    },
+    ru: {
+      title: 'Рыбная ловля: навык повышен до 150',
+      description: 'Достигнута новая профессиональная веха.',
+      typeLabel: 'ПРОФЕССИЯ',
+    },
+  },
+  {
+    name: 'profession milestone: the Lua handler defaults the number to 0',
+    type: 'PROFESSION_MILESTONE',
+    source: 'RECORDED',
+    data: { kind: 'MILESTONE', professionName: 'Гербализм' },
+    en: {
+      title: 'Гербализм reached skill 0',
+      description: 'A new profession milestone has been reached.',
+      typeLabel: 'PROFESSION',
+    },
+    ru: {
+      title: 'Гербализм: навык повышен до 0',
+      description: 'Достигнута новая профессиональная веха.',
+      typeLabel: 'ПРОФЕССИЯ',
     },
   },
   {
@@ -289,12 +339,12 @@ const ADDON_REFERENCE: ReferenceCase[] = [
     en: {
       title: 'Первая ночь в Тирисфале',
       description: 'Туман стелился по земле.',
-      typeLabel: 'Journal entry',
+      typeLabel: 'MEMORY',
     },
     ru: {
       title: 'Первая ночь в Тирисфале',
       description: 'Туман стелился по земле.',
-      typeLabel: 'Запись в дневнике',
+      typeLabel: 'ВОСПОМИНАНИЕ',
     },
   },
   {

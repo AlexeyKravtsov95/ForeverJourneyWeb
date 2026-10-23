@@ -73,12 +73,12 @@ export type SavedVariablesResult = SavedVariablesOk | SavedVariablesError
  * fall back to their own text and are never translated or invented.
  */
 const TYPE_LABELS: Record<string, string> = {
-  ZONE: 'Zone discovered',
-  ZONE_DISCOVERED: 'Zone discovered',
-  ZONE_DISCOVERY: 'Zone discovered',
+  ZONE: 'DISCOVERY',
+  ZONE_DISCOVERED: 'DISCOVERY',
+  ZONE_DISCOVERY: 'DISCOVERY',
   DEATH: 'Death',
-  LEVEL: 'Level up',
-  LEVEL_UP: 'Level up',
+  LEVEL: 'LEVEL',
+  LEVEL_UP: 'LEVEL',
   VICTORY: 'Victory',
   BOSS_VICTORY: 'Victory',
   INSTANCE: 'Instance',
@@ -86,10 +86,10 @@ const TYPE_LABELS: Record<string, string> = {
   QUEST: 'Quest milestone',
   QUEST_MILESTONE: 'Quest milestone',
   ACHIEVEMENT: 'Achievement',
-  PROFESSION_MILESTONE: 'Profession milestone',
+  PROFESSION_MILESTONE: 'PROFESSION',
   REPUTATION_MILESTONE: 'Reputation milestone',
-  MEMORY: 'Memory',
-  MANUAL_MEMORY: 'Journal entry',
+  MEMORY: 'MEMORY',
+  MANUAL_MEMORY: 'MEMORY',
 }
 
 function typeLabel(type: string): string {
@@ -153,6 +153,34 @@ const ENVIRONMENTAL_TYPES = new Set([
   'SLIME',
 ])
 
+/**
+ * Memories.lua ENVIRONMENT_TITLE_KEYS — the literal Locale.lua titles of the
+ * current addon, environmental causes first, then the two fallbacks for an
+ * unknown cause and for deaths without any known cause.
+ */
+const ENVIRONMENT_TITLE_KEYS: Record<string, string> = {
+  DROWNING: 'Drowned',
+  FALLING: 'Died from a fall',
+  FATIGUE: 'Succumbed to exhaustion',
+  FIRE: 'Perished in fire',
+  LAVA: 'Perished in lava',
+  SLIME: 'Perished in slime',
+}
+const UNKNOWN_ENVIRONMENT_TITLE = 'Lost to the environment'
+const GENERIC_DEATH_TITLE = 'Fell in battle'
+
+/** tonumber()-like coercion: numbers pass, numeric strings parse, the rest is nil. */
+function luaNumber(value: LuaValue | undefined): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value === 'string') {
+    const text = value.trim()
+    if (text === '') return undefined
+    const parsed = Number(text)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
 function deriveEventText(
   type: string,
   data: LuaTable | null,
@@ -207,26 +235,21 @@ function deriveEventText(
         : none
     }
     case 'DEATH': {
-      // Memories.lua ENVIRONMENT_TITLE_KEYS: each environmental cause has its
-      // own title; without a killer and without a known cause the generic
-      // "Fell in battle" is used. The killing spell is named only when the
+      // Memories.lua checks the environmental cause BEFORE the killer: when
+      // data.cause == "ENVIRONMENTAL", the cause's own title wins; an unknown
+      // cause gets its fallback, and only deaths without any known cause fall
+      // back to the generic title. The killing spell is named only when the
       // file actually carries spellName — a bare spellID cannot be resolved
       // and is never turned into an invented name.
-      const ENVIRONMENT_TITLE_KEYS: Record<string, string> = {
-        DROWNING: 'Drowned',
-        FALLING: 'Fell from a great height',
-        FATIGUE: 'Succumbed to fatigue',
-        FIRE: 'Burned to death',
-        LAVA: 'Consumed by lava',
-        SLIME: 'Dissolved in slime',
-      }
-      const killer = field('killerName') || field('killerNameRaw')
-      let title = 'Fell in battle'
-      if (killer) {
-        title = `Fell in battle — ${killer}`
-      } else if (field('cause').toUpperCase() === 'ENVIRONMENTAL') {
+      let title = GENERIC_DEATH_TITLE
+      if (field('cause').toUpperCase() === 'ENVIRONMENTAL') {
         const cause = field('environmentalType').toUpperCase()
-        if (ENVIRONMENTAL_TYPES.has(cause)) title = ENVIRONMENT_TITLE_KEYS[cause]
+        title = ENVIRONMENTAL_TYPES.has(cause)
+          ? ENVIRONMENT_TITLE_KEYS[cause]
+          : UNKNOWN_ENVIRONMENT_TITLE
+      } else {
+        const killer = field('killerName') || field('killerNameRaw')
+        if (killer) title = `Fell in battle — ${killer}`
       }
       const spell = field('spellName')
       return {
@@ -256,9 +279,11 @@ function deriveEventText(
       }
     }
     case 'PROFESSION_MILESTONE': {
-      // ProfessionMilestones.lua: data.kind says which template applies —
-      // LEARNED names the profession learned, MILESTONE the profession and
-      // the skill level reached; only these real fields are used
+      // ProfessionMilestones.lua: data.kind selects the template. The numeric
+      // parameter is tonumber(data.milestone) or tonumber(data.skillLevel) —
+      // defaulting to 0 like the Lua handler; the profession name comes from
+      // data.professionName and stays exactly as recorded (no translation of
+      // a name the client would localize in game).
       const kind = field('kind').toUpperCase()
       const profession = field('professionName')
       if (kind === 'LEARNED' && profession) {
@@ -267,10 +292,10 @@ function deriveEventText(
           description: 'A new profession became part of the journey.',
         }
       }
-      const skillLevel = count('skillLevel')
-      if (kind === 'MILESTONE' && profession && skillLevel !== undefined) {
+      if (kind === 'MILESTONE' && profession) {
+        const number = Math.floor(luaNumber(data?.milestone) ?? luaNumber(data?.skillLevel) ?? 0)
         return {
-          title: `${profession} reached skill ${skillLevel}`,
+          title: `${profession} reached skill ${number}`,
           description: 'A new profession milestone has been reached.',
         }
       }

@@ -78,42 +78,53 @@ ForeverJourney.lua (байты файла)
   `QuestMilestones.lua`; формы совпадают со словарями `src/lib/localize.ts`,
   поэтому RU-перевод работает автоматически):
   - `ZONE` — `data.zoneName` (fallback `data.zone`, `location.name`):
-    «Discovered {зона}» / «Открыта зона: {зона}»;
-  - `LEVEL` — `data.level`: «Reached Level {n}» / «Достигнут {n}-й уровень»;
+    «Discovered {зона}» / «Открыта локация: {зона}»; описание
+    «A new place became part of your journey.»/«Новое место стало частью
+    твоего пути.»; метка типа «DISCOVERY»/«ОТКРЫТИЕ»;
+  - `LEVEL` — `data.level`: «Reached Level {n}» / «Уровень повышен до {n}»;
     описание — константа `MEMORY_DESCRIPTION_LEVEL`
     («Your journey continues.» / «Путешествие продолжается.»);
+    метка типа «LEVEL»/«УРОВЕНЬ»;
   - `INSTANCE` — `data.instanceName` (fallback `data.instance`,
     `location.name`): «Entered {подземелье}» / «Вход в подземелье: {…}»;
-  - `DEATH` — бой: `data.killerName` (fallback `killerNameRaw`) —
-    «Fell in battle — {враг}» / «Пал в бою — {враг}»; окружение
-    (`data.cause == "ENVIRONMENTAL"`): точные заголовки
-    `ENVIRONMENT_TITLE_KEYS` — FALLING «Fell from a great height»/
-    «Упал с большой высоты», DROWNING «Drowned»/«Утонул», FATIGUE
-    «Succumbed to fatigue»/«Изнемог от усталости», FIRE «Burned to death»/
-    «Сгорел заживо», LAVA «Consumed by lava»/«Погиб в лаве», SLIME
-    «Dissolved in slime»/«Растворился в слизи»; искусственное
-    «Fell in battle — Drowning» не формируется; без убийцы и известной
-    причины — штатный общий заголовок «Fell in battle»/«Пал в бою»;
-    заклинание последнего удара — только сохранённое `data.spellName`
-    («Final blow: {заклинание}.»); одиночный `spellID` в имя не превращается,
-    при его отсутствии — «Every journey has its setbacks.»;
+    описание «Another chapter of your journey lies within.»/«Впереди ещё
+    одна глава путешествия.»;
+  - `DEATH` — как `Memories.lua`, причина окружения проверяется РАНЬШЕ
+    убийцы: при `data.cause == "ENVIRONMENTAL"` точные заголовки
+    `ENVIRONMENT_TITLE_KEYS` — FALLING «Died from a fall»/«Погиб при
+    падении», DROWNING «Drowned»/«Утонул», FATIGUE «Succumbed to
+    exhaustion»/«Погиб от истощения», FIRE «Perished in fire»/«Погиб в
+    огне», LAVA «Perished in lava»/«Погиб в лаве», SLIME «Perished in
+    slime»/«Погиб в слизи»; неизвестная причина — «Lost to the
+    environment»/«Погиб из-за окружения»; без причины окружения —
+    `data.killerName` (fallback `killerNameRaw`) «Fell in battle —
+    {враг}»/«Пал в бою — {враг}», иначе штатный общий «Fell in
+    battle»/«Пал в бою»; искусственное «Fell in battle — Drowning» не
+    формируется. Описание: заклинание последнего удара — только
+    сохранённое `data.spellName` («Final blow: {заклинание}.»); одиночный
+    `spellID` в имя не превращается, иначе — «Every journey has its
+    setbacks.»/«Даже поражения становятся частью истории.»;
   - `QUEST_MILESTONE` — счётчик (`quests`/`questCount`/`completedQuests`/`count`):
-    «{n} quests completed» / «Выполнено заданий: {n}»;
+    «{n} quests completed» / «Выполнено {n} заданий»; описание «Another
+    important questing milestone has been reached.»/«Достигнута новая
+    важная веха в путешествии.»; метка типа «ВЕХА ЗАДАНИЙ»;
   - `VICTORY`/`BOSS_VICTORY` — заголовок `data.encounterName`, при
     отсутствии — штатный «Unknown boss»/«Неизвестный босс»; описание —
     фиксированная локализованная строка «The battle ended in victory.»/
-    «Битва завершилась победой.» (восстановление последнего удара для этого
-    типа не применяется);
+    «Сражение завершилось победой.» (восстановление последнего удара для
+    этого типа не применяется);
   - `PROFESSION_MILESTONE` — `data.kind` выбирает шаблон: `LEARNED` —
     «Learned profession: {professionName}»/«Изучена профессия: {…}» с
     описанием «A new profession became part of the journey.»/«Новая
     профессия стала частью путешествия.»; `MILESTONE` —
-    «{professionName} reached skill {skillLevel}»/«{…}: навык {n}» с
-    описанием «A new profession milestone has been reached.»/«Достигнут
-    новый этап профессии.». Используются только реальные поля профессии
-    (`professionName`, `skillLevel`); `spellName`/`itemName`/`recipeName`
-    для определения изученного не применяются;
-    метка типа — «Profession milestone» / «Этап профессии».
+    «{professionName} reached skill {n}»/«{…}: навык повышен до {n}» с
+    описанием «A new profession milestone has been reached.»/«Достигнута
+    новая профессиональная веха.». Числовой параметр — в порядке
+    Lua-обработчика: `tonumber(data.milestone)`, затем
+    `tonumber(data.skillLevel)`, затем `0`. Название профессии — только
+    `data.professionName` (как записано, без выдуманного перевода);
+    `spellName`/`itemName`/`recipeName` не применяются; метка типа —
+    «PROFESSION»/«ПРОФЕССИЯ». Метка ручных записей — «MEMORY»/«ВОСПОМИНАНИЕ».
   Приоритет: (1) сохранённый текст (`memory.title`/`description`, ручные
   `data.title`/`data.note`); (2) проверенные данные события; (3) нейтральное
   описание/подпись типа, если данных нет. Имена, уровни, причины смерти и
@@ -176,7 +187,7 @@ ForeverJourney.lua (байты файла)
 - **Локализованные клиентом WoW названия** (имена зон/боссов в клиентской
   локали) — в файле только то, что аддон записал на момент события.
 
-## 4. Пройденные тесты (vitest, 262, все зелёные)
+## 4. Пройденные тесты (vitest, 283, все зелёные)
 
 - Парсер: стиль сериализации WoW (CRLF, табы, скобочные ключи), все формы чисел,
   булевы/`nil`, позиционные массивы, дубликаты ключей, комментарии, BOM,

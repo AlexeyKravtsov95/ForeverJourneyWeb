@@ -22,14 +22,18 @@ describe('localizeMemory — type labels', () => {
     ['Zone', 'Зона'],
     ['ZONE', 'Зона'],
     ['Zone Discovered', 'Зона открыта'],
+    ['DISCOVERY', 'ОТКРЫТИЕ'],
     ['Death', 'Смерть'],
-    ['Level', 'Уровень'],
+    ['Level', 'УРОВЕНЬ'],
+    ['LEVEL', 'УРОВЕНЬ'],
     ['Level Up', 'Новый уровень'],
     ['Victory', 'Победа'],
     ['Instance', 'Подземелье'],
-    ['Memory', 'Воспоминание'],
-    ['Quest Milestone', 'Этап заданий'],
+    ['Memory', 'ВОСПОМИНАНИЕ'],
+    ['MEMORY', 'ВОСПОМИНАНИЕ'],
+    ['Quest Milestone', 'ВЕХА ЗАДАНИЙ'],
     ['Achievement', 'Достижение'],
+    ['PROFESSION', 'ПРОФЕССИЯ'],
     ['Journal Entry', 'Запись в дневнике'],
   ])(`translates the system label "%s" to "%s" in Russian`, (en, ru) => {
     expect(localizeMemory(memory({ typeLabel: en }), 'ru').typeLabel).toBe(ru)
@@ -55,19 +59,21 @@ describe('localizeMemory — type labels', () => {
 
 describe('localizeMemory — template text', () => {
   it.each([
-    ['A new place became part of your journey.', 'Новое место стало частью твоего путешествия.'],
+    ['A new place became part of your journey.', 'Новое место стало частью твоего пути.'],
     ['Your journey continues.', 'Путешествие продолжается.'],
-    ['The battle ended in victory.', 'Битва завершилась победой.'],
-    ['Every journey has its setbacks.', 'На пути каждого героя случаются поражения.'],
+    ['The battle ended in victory.', 'Сражение завершилось победой.'],
+    ['Every journey has its setbacks.', 'Даже поражения становятся частью истории.'],
     ['Reached the level cap.', 'Достигнут максимальный уровень.'],
-    [
-      'Another chapter of your journey lies within.',
-      'Впереди новая глава твоего путешествия.',
-    ],
+    ['Another chapter of your journey lies within.', 'Впереди ещё одна глава путешествия.'],
     [
       'Another important questing milestone has been reached.',
-      'Достигнут ещё один важный этап выполнения заданий.',
+      'Достигнута новая важная веха в путешествии.',
     ],
+    [
+      'A new profession became part of the journey.',
+      'Новая профессия стала частью путешествия.',
+    ],
+    ['A new profession milestone has been reached.', 'Достигнута новая профессиональная веха.'],
   ])('translates the system description "%s"', (en, ru) => {
     expect(localizeMemory(memory({ description: en }), 'ru').description).toBe(ru)
   })
@@ -84,19 +90,35 @@ describe('localizeMemory — template text', () => {
     expect(view.description).toBe('Достигнут уровень 20.')
   })
 
-  it.each([1, 3, 11, 21, 80])('translates "Reached Level %i" with the correct ordinal', (level) => {
+  it.each([1, 3, 11, 21, 80])('translates "Reached Level %i" as "Уровень повышен до %i"', (level) => {
     const entry = memory({ type: 'level', title: `Reached Level ${level}` })
-    expect(localizeMemory(entry, 'ru').title).toBe(`Достигнут ${level}-й уровень`)
+    expect(localizeMemory(entry, 'ru').title).toBe(`Уровень повышен до ${level}`)
   })
 
   it.each([
-    ['Discovered Dun Morogh', 'Открыта зона: Dun Morogh'],
-    ['Discovered Тирисфальские леса', 'Открыта зона: Тирисфальские леса'],
+    ['Discovered Dun Morogh', 'Открыта локация: Dun Morogh'],
+    ['Discovered Тирисфальские леса', 'Открыта локация: Тирисфальские леса'],
     ['Fell in battle — Stonesplinter Trogg', 'Пал в бою — Stonesplinter Trogg'],
     ['Entered Deadmines', 'Вход в подземелье: Deadmines'],
-    ['250 quests completed', 'Выполнено заданий: 250'],
+    ['250 quests completed', 'Выполнено 250 заданий'],
+    ['Learned profession: Алхимия', 'Изучена профессия: Алхимия'],
+    ['Кузнечное дело reached skill 75', 'Кузнечное дело: навык повышен до 75'],
   ])('translates the parameterized system title "%s" keeping the name verbatim', (en, ru) => {
     expect(localizeMemory(memory({ type: 'zone', title: en }), 'ru').title).toBe(ru)
+  })
+
+  it.each([
+    ['Fell in battle', 'Пал в бою'],
+    ['Drowned', 'Утонул'],
+    ['Died from a fall', 'Погиб при падении'],
+    ['Succumbed to exhaustion', 'Погиб от истощения'],
+    ['Perished in fire', 'Погиб в огне'],
+    ['Perished in lava', 'Погиб в лаве'],
+    ['Perished in slime', 'Погиб в слизи'],
+    ['Lost to the environment', 'Погиб из-за окружения'],
+    ['Unknown boss', 'Неизвестный босс'],
+  ])('translates the exact system title "%s"', (en, ru) => {
+    expect(localizeMemory(memory({ type: 'death', title: en }), 'ru').title).toBe(ru)
   })
 
   it.each([
@@ -185,7 +207,7 @@ describe('localizeMemory — manual memory detection (real addon markers)', () =
     const view = localizeMemory(importedManual, 'ru')
     expect(view.title).toBe('Reached Level 20')
     expect(view.description).toBe('Your journey continues.')
-    expect(view.typeLabel).toBe('Воспоминание') // rendered uppercase by the UI
+    expect(view.typeLabel).toBe('ВОСПОМИНАНИЕ') // rendered uppercase by the UI
     expect(view.location).toBe('Undercity')
   })
 
@@ -236,9 +258,9 @@ describe('localizeMemory — manual memory detection (real addon markers)', () =
       description: 'Reached level 20.',
     })
     const view = localizeMemory(auto, 'ru')
-    expect(view.title).toBe('Достигнут 20-й уровень')
+    expect(view.title).toBe('Уровень повышен до 20')
     expect(view.description).toBe('Достигнут уровень 20.')
-    expect(view.typeLabel).toBe('Уровень')
+    expect(view.typeLabel).toBe('УРОВЕНЬ')
   })
 
   it('keeps template-looking text of unknown-origin events original', () => {
