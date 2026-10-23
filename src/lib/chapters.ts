@@ -10,7 +10,10 @@ export interface Chapter {
 
 /**
  * Groups memories into chronological month chapters, exactly as the web book
- * renders them: sorted by timestamp (undated last), then grouped by month.
+ * renders them: sorted by timestamp (undated last). Array.prototype.sort is
+ * stable (ES2019+), so memories with equal timestamps keep the order the
+ * import established — for SavedVariables that is the file order, for FJBOOK1
+ * the export order — instead of being re-shuffled by a secondary key.
  */
 export function buildChapters(
   memories: JournalMemory[],
@@ -20,8 +23,7 @@ export function buildChapters(
   const sorted = [...memories].sort((a, b) => {
     const at = a.timestamp ?? Number.POSITIVE_INFINITY
     const bt = b.timestamp ?? Number.POSITIVE_INFINITY
-    if (at !== bt) return at - bt
-    return (a.title || a.typeLabel || '').localeCompare(b.title || b.typeLabel || '')
+    return at - bt
   })
   const groups = new Map<string, JournalMemory[]>()
   for (const memory of sorted) {

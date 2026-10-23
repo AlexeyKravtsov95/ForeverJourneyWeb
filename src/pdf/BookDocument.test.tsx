@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { BookDocument } from './BookDocument'
 import { registerBookFonts } from './registerFonts'
 import { demoJournal } from '../demo/demoJournal'
@@ -81,6 +82,29 @@ describe('BookDocument', () => {
     async () => {
       const buffer = await renderToBuffer(
         <BookDocument journal={markerJournal} tr={strings.ru} lang="ru" />
+      )
+      expect(isPdf(buffer)).toBe(true)
+      expect(buffer.length).toBeGreaterThan(10_000)
+    },
+    120_000
+  )
+
+  it(
+    'renders a journal built from a SavedVariables file (RU, missing stats hidden)',
+    async () => {
+      const { buildJournalFromSavedVariables, readSavedVariables } = await import(
+        '../lib/savedvariables'
+      )
+      const lua = readFileSync(
+        new URL('../../fixtures/savedvariables/ForeverJourney.lua', import.meta.url),
+        'utf8'
+      )
+      const sv = readSavedVariables(lua)
+      if (sv.status !== 'ok') throw new Error('fixture must parse')
+      const journal = buildJournalFromSavedVariables(sv, 'Гордунни:Аэлириэн')
+      if (!journal) throw new Error('journal must build')
+      const buffer = await renderToBuffer(
+        <BookDocument journal={journal} tr={strings.ru} lang="ru" />
       )
       expect(isPdf(buffer)).toBe(true)
       expect(buffer.length).toBeGreaterThan(10_000)

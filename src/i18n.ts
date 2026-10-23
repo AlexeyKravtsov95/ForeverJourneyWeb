@@ -1,4 +1,5 @@
 import type { ImportErrorCode } from './lib/fjbook'
+import type { SavedVariablesErrorCode } from './lib/savedvariables'
 
 export type Lang = 'en' | 'ru'
 
@@ -31,6 +32,17 @@ export interface Strings {
   importPlaceholder: string
   importButton: string
   demoButton: string
+  importSvLabel: string
+  importSvHint: string
+  importSvButton: string
+  svPathTitle: string
+  svHowSteps: string[]
+  svPickTitle: string
+  svPickHint: string
+  svCharacterMemories: string
+  svCharacterFavorites: string
+  svImportedMeta: string
+  svErrors: Record<SavedVariablesErrorCode, string>
   errorTitle: string
   waitingParts: string
   howTitle: string
@@ -69,10 +81,42 @@ export const strings: Record<Lang, Strings> = {
     brandName: 'Forever Journey',
     landingKicker: 'World of Warcraft: Forever',
     landingSubtitle: 'Turn your adventures into a story worth keeping',
-    importLabel: 'Export code',
+    importLabel: 'Paste export code',
     importPlaceholder: 'Paste the FJBOOK1 export code here…',
     importButton: 'Import Journal',
     demoButton: 'Try Demo Journal',
+    importSvLabel: 'Import SavedVariables',
+    importSvHint:
+      'Upload the addon database file straight from disk — no chat export needed. Everything stays in your browser.',
+    importSvButton: 'Import SavedVariables',
+    svPathTitle: 'How to get the file',
+    svHowSteps: [
+      'In game, type /reload and wait for the UI to reload — the addon then flushes its database to disk.',
+      'In your World of Warcraft folder, open WTF/Account/<ACCOUNT>/SavedVariables/ForeverJourney.lua (<ACCOUNT> is your account number or login name).',
+      'Upload that file with the button above, then pick a character.',
+      'The book is bound entirely in your browser — download the PDF.',
+    ],
+    svPickTitle: 'Choose a character',
+    svPickHint:
+      'The file {name} holds {count} character(s). Journals are never merged — choose whose book to bind.',
+    svCharacterMemories: '{memories} memories',
+    svCharacterFavorites: '{favorites} favorite(s)',
+    svImportedMeta: 'SavedVariables · schema {schema} · {memories} memories',
+    svErrors: {
+      EMPTY_INPUT: 'The file is empty.',
+      FILE_TOO_LARGE: 'The file is too large.',
+      PARSE_ERROR:
+        'This is not a valid SavedVariables file (line {detail}). Unsupported Lua was rejected, nothing was executed.',
+      TOO_DEEP: 'The file nests tables too deeply.',
+      TOO_MANY_VALUES: 'The file contains too many elements.',
+      STRING_TOO_LONG: 'A string in the file is too long.',
+      DB_NOT_FOUND:
+        'ForeverJourneyDB was not found — this file is not the Forever Journey addon database.',
+      UNSUPPORTED_SCHEMA:
+        'Unsupported SavedVariables schema ({detail}); this app supports schemaVersion 3.',
+      NO_CHARACTERS: 'The database contains no characters.',
+      MEMORIES_TOO_LARGE: 'The character has more memories than the app can import.',
+    },
     errorTitle: 'Import failed.',
     waitingParts:
       'Received {received} of {total} parts. Still waiting for part(s) {missing} — paste the remaining blocks into the same field and press Import Journal again.',
@@ -141,10 +185,42 @@ export const strings: Record<Lang, Strings> = {
     brandName: 'Forever Journey',
     landingKicker: 'World of Warcraft: Forever',
     landingSubtitle: 'Превратите свои приключения в историю, которую хочется сохранить',
-    importLabel: 'Экспортный код',
+    importLabel: 'Вставить экспортный код',
     importPlaceholder: 'Вставьте здесь экспортный код FJBOOK1…',
     importButton: 'Импортировать журнал',
     demoButton: 'Демо-журнал',
+    importSvLabel: 'Импорт SavedVariables',
+    importSvHint:
+      'Загрузите файл базы аддона прямо с диска — экспорт в чат не нужен. Всё остаётся в вашем браузере.',
+    importSvButton: 'Импортировать SavedVariables',
+    svPathTitle: 'Как получить файл',
+    svHowSteps: [
+      'В игре введите /reload и дождитесь перезагрузки интерфейса — аддон запишет базу на диск.',
+      'В папке World of Warcraft откройте WTF/Account/<ACCOUNT>/SavedVariables/ForeverJourney.lua (<ACCOUNT> — номер аккаунта или имя входа).',
+      'Загрузите этот файл кнопкой выше и выберите персонажа.',
+      'Книга собирается целиком в вашем браузере — скачайте PDF.',
+    ],
+    svPickTitle: 'Выберите персонажа',
+    svPickHint:
+      'В файле {name} персонажей: {count}. Журналы не объединяются — выберите, чью книгу собрать.',
+    svCharacterMemories: 'воспоминаний: {memories}',
+    svCharacterFavorites: 'избранных: {favorites}',
+    svImportedMeta: 'SavedVariables · схема {schema} · воспоминаний: {memories}',
+    svErrors: {
+      EMPTY_INPUT: 'Файл пуст.',
+      FILE_TOO_LARGE: 'Файл слишком велик.',
+      PARSE_ERROR:
+        'Это не корректный файл SavedVariables (строка {detail}). Неподдерживаемая конструкция Lua отклонена, ничего не исполнялось.',
+      TOO_DEEP: 'В файле слишком глубокая вложенность таблиц.',
+      TOO_MANY_VALUES: 'В файле слишком много элементов.',
+      STRING_TOO_LONG: 'Строка в файле слишком длинная.',
+      DB_NOT_FOUND:
+        'ForeverJourneyDB не найден — этот файл не является базой аддона Forever Journey.',
+      UNSUPPORTED_SCHEMA:
+        'Неподдерживаемая схема SavedVariables ({detail}); приложение работает с schemaVersion 3.',
+      NO_CHARACTERS: 'В базе нет персонажей.',
+      MEMORIES_TOO_LARGE: 'У персонажа больше воспоминаний, чем приложение может импортировать.',
+    },
     errorTitle: 'Не удалось импортировать.',
     waitingParts:
       'Получено {received} из {total} частей. Не хватает частей: {missing} — вставьте оставшиеся блоки в то же поле и снова нажмите «Импортировать журнал».',

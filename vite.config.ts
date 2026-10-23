@@ -7,5 +7,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.{ts,tsx,mjs}'],
+    // fixtures/ is generated (gitignored) — rebuild the SavedVariables ones
+    // before the suites that read them from disk
+    globalSetup: ['scripts/vitest-setup-fixtures.mjs'],
   },
 })

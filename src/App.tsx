@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react'
 import { strings, type Lang } from './i18n'
 import { initialLang, langStorage, saveManualLang } from './langPreference'
 import Landing from './components/Landing'
-import Book from './components/Book'
+import Book, { type ImportSummary } from './components/Book'
+import CharacterPicker from './components/CharacterPicker'
 import type { Journal } from './lib/journal'
-import type { ImportMeta } from './lib/fjbook'
+import type { SavedVariablesOk } from './lib/savedvariables'
 
-type View = { kind: 'landing' } | { kind: 'book'; journal: Journal; meta: ImportMeta }
+type View =
+  | { kind: 'landing' }
+  | { kind: 'sv-select'; sv: SavedVariablesOk; fileName: string }
+  | { kind: 'book'; journal: Journal; meta: ImportSummary }
 
 export default function App() {
   const [lang, setLang] = useState<Lang>(() => initialLang(langStorage()))
@@ -33,6 +37,17 @@ export default function App() {
           lang={lang}
           onLangChange={changeLang}
           onImported={(journal, meta) => setView({ kind: 'book', journal, meta })}
+          onSavedVariables={(sv, fileName) => setView({ kind: 'sv-select', sv, fileName })}
+        />
+      ) : view.kind === 'sv-select' ? (
+        <CharacterPicker
+          tr={tr}
+          lang={lang}
+          sv={view.sv}
+          fileName={view.fileName}
+          onLangChange={changeLang}
+          onPick={(journal, meta) => setView({ kind: 'book', journal, meta })}
+          onCancel={() => setView({ kind: 'landing' })}
         />
       ) : (
         <Book

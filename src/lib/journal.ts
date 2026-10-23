@@ -12,11 +12,31 @@ export interface JournalCharacter {
   level: number
 }
 
+/**
+ * A historical stats snapshot the addon stores in SavedVariables
+ * (`character.recoveredHistory`): values captured when the character was first
+ * seen by the current addon version — NOT the live counters. Kept in the model
+ * so the data is not lost, but the book must not show it as current stats.
+ */
+export interface RecoveredHistory {
+  capturedAt?: number
+  completedQuests?: number
+  playedTotal?: number
+  level?: number
+}
+
 export interface JournalJourney {
   startedAt?: number
-  deaths: number
-  completedQuests: number
-  totalPlayed: number
+  /**
+   * Stats the source export could not provide stay undefined and are hidden
+   * by the book (a missing value must not be shown as a trustworthy 0).
+   * FJBOOK1 always carries all three, so existing imports render as before.
+   */
+  deaths?: number
+  completedQuests?: number
+  totalPlayed?: number
+  /** Historical snapshot from SavedVariables; never filled by FJBOOK1. */
+  recovered?: RecoveredHistory
 }
 
 export interface JournalMemory {

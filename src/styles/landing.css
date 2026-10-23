@@ -249,3 +249,150 @@
   color: #6f5e42;
   margin: 0;
 }
+
+/* ---------- SavedVariables import panel ---------- */
+
+.panel--sv {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.panel__hint {
+  margin: 0;
+  font-style: italic;
+  font-size: 0.92rem;
+  color: #5d4520;
+  line-height: 1.5;
+}
+
+.panel__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sv-how {
+  font-size: 0.88rem;
+  color: #6a4d1c;
+  line-height: 1.5;
+}
+
+.sv-how summary {
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: #7c5c26;
+  margin-bottom: 0.5rem;
+}
+
+.sv-how summary::-webkit-details-marker {
+  color: #a5814a;
+}
+
+.sv-how__steps {
+  margin: 0;
+  padding-left: 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* ---------- character picker ---------- */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.picker__bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.picker__title {
+  font-variant: small-caps;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: #6d4c17;
+  margin: 0.2rem 0 0;
+  text-align: center;
+}
+
+.picker__hint {
+  margin: 0 auto;
+  max-width: 480px;
+  text-align: center;
+  font-style: italic;
+  font-size: 0.92rem;
+  color: #5d4520;
+  line-height: 1.5;
+}
+
+.picker__list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.8rem;
+}
+
+.picker__char {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 1rem 0.9rem;
+  border-radius: 4px;
+  border: 1px solid rgba(122, 90, 43, 0.55);
+  background: rgba(255, 251, 238, 0.55);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.picker__char:hover {
+  border-color: #8a6a2f;
+  background: rgba(255, 248, 222, 0.85);
+}
+
+.picker__char-name {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  color: #3a2a10;
+}
+
+.picker__char-realm {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7c5c26;
+}
+
+.picker__char-meta {
+  font-size: 0.85rem;
+  color: #6a4d1c;
+}
+
+.picker__char-dates {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #9b8258;
+}
