@@ -24,6 +24,8 @@ const TYPE_LABELS_RU: Record<string, string> = {
   memory: 'Воспоминание',
   'quest milestone': 'Этап заданий',
   achievement: 'Достижение',
+  'profession milestone': 'Этап профессии',
+  'reputation milestone': 'Этап репутации',
   'journal entry': 'Запись в дневнике',
 }
 
@@ -105,6 +107,8 @@ const SYSTEM_TYPES = new Set([
   'quest',
   'quest_milestone',
   'achievement',
+  'profession_milestone',
+  'reputation_milestone',
 ])
 const SYSTEM_SOURCES = new Set([
   'zone',

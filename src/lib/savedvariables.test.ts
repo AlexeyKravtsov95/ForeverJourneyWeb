@@ -31,12 +31,12 @@ describe('database envelope', () => {
     expect(aelirien).toMatchObject({
       name: 'Аэлириэн',
       realm: 'Гордунни',
-      memories: 11,
+      memories: 14,
       favorites: 2,
       createdAt: 1_741_199_000 * 1000,
     })
     expect(aelirien?.firstMemoryAt).toBe(1_741_200_000 * 1000)
-    expect(aelirien?.lastMemoryAt).toBe(1_741_500_000 * 1000)
+    expect(aelirien?.lastMemoryAt).toBe(1_741_700_000 * 1000)
   })
 
   it('rejects schema 2, missing database and missing characters', () => {
@@ -101,7 +101,7 @@ describe('journal conversion', () => {
 
   it('imports every memory, chronologically sorted with stable order for equal times', () => {
     const journal = buildJournalFromSavedVariables(sv, AELIRIEN)
-    expect(journal?.memories).toHaveLength(11)
+    expect(journal?.memories).toHaveLength(14)
     const times = journal?.memories.map((m) => m.timestamp ?? Number.POSITIVE_INFINITY)
     expect(times).toEqual([...(times ?? [])].sort((a, b) => a - b))
     // the two entries with timestamp 1741400000 keep file order: QUEST_MILESTONE first
@@ -110,8 +110,8 @@ describe('journal conversion', () => {
     expect(equal?.[0].type).toBe('QUEST_MILESTONE')
     expect(equal?.[1].type).toBe('ZONE')
     // the undated entry goes last
-    expect(journal?.memories[10].timestamp).toBeUndefined()
-    expect(journal?.memories[10].title).toBe('Запись без даты')
+    expect(journal?.memories[13].timestamp).toBeUndefined()
+    expect(journal?.memories[13].title).toBe('Запись без даты')
   })
 
   it('preserves manual memories verbatim: title, note, personal note with escapes', () => {
@@ -127,7 +127,7 @@ describe('journal conversion', () => {
     })
   })
 
-  it('rebuilds automatic event text from verified data fields (Memories.lua templates)', () => {
+  it('rebuilds automatic event text following the real addon handlers', () => {
     const journal = buildJournalFromSavedVariables(sv, AELIRIEN)
     const byTitle = (title: string) => journal?.memories.find((m) => m.title === title)
 
@@ -142,14 +142,18 @@ describe('journal conversion', () => {
       location: 'Western Plaguelands',
       description: 'A new place became part of your journey.',
     })
-    // DEATH: killerName plus the killing spell when stored
+    // DEATH by killer: killerName plus the killing spell (data.spellName)
     expect(byTitle('Fell in battle — Worgen Packleader')).toMatchObject({
       typeLabel: 'Death',
       description: 'Final blow: Rake.',
     })
-    // LEVEL: data.level
+    // DEATH by environment: data.cause == "ENVIRONMENTAL" + a known environmentalType
+    expect(byTitle('Fell in battle — Drowning')).toMatchObject({
+      description: 'Every journey has its setbacks.',
+    })
+    // LEVEL: MEMORY_DESCRIPTION_LEVEL is the generic constant
     expect(byTitle('Reached Level 6')).toMatchObject({
-      description: 'Reached level 6.',
+      description: 'Your journey continues.',
     })
     // QUEST_MILESTONE: quest counter
     expect(byTitle('25 quests completed')).toMatchObject({
@@ -159,30 +163,66 @@ describe('journal conversion', () => {
     expect(byTitle('Entered The Deadmines')).toMatchObject({
       description: 'Another chapter of your journey lies within.',
     })
-    // saved display text always wins over anything derived from data
-    expect(byTitle('Victory in the Deadmines')).toMatchObject({
-      description: 'The battle ended in victory.', // NOT "Final blow: Pyroblast."
+    // BOSS_VICTORY: title is data.encounterName, killing blow is data.spellName
+    const boss = journal?.memories.find((m) => m.type === 'BOSS_VICTORY')
+    expect(boss).toMatchObject({
+      typeLabel: 'Victory',
+      title: 'Edwin VanCleef',
+      description: 'Final blow: Pyroblast.',
+    })
+    // PROFESSION_MILESTONE LEARNED names the thing learned…
+    const learned = journal?.memories.filter((m) => m.type === 'PROFESSION_MILESTONE')
+    expect(learned).toHaveLength(2)
+    expect(learned?.[0]).toMatchObject({
+      typeLabel: 'Profession milestone',
+      title: 'Major Mana Potion',
+      description: 'Your journey continues.',
+    })
+    // …MILESTONE names the profession
+    expect(learned?.[1]).toMatchObject({
+      title: 'Алхимия',
+      description: 'Your journey continues.',
     })
   })
 
-  it('derives nothing when the data is missing or has no confirmed template', () => {
-    // environmental death without a killer name: no enemy may be invented
+  it('saved display text always wins over anything derived from data', () => {
     const source = [
       'ForeverJourneyDB = {',
       '\t["schemaVersion"] = 3,',
       '\t["characters"] = {',
       '\t\t["R:N"] = {',
       '\t\t\t["memories"] = {',
-      '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { ["environmentalType"] = "FALL" } },',
-      '\t\t\t\t{ ["type"] = "ZONE", ["data"] = { } },',
-      '\t\t\t\t{ ["type"] = "LEVEL", ["data"] = { ["level"] = "many" } },',
+      '\t\t\t\t{ ["type"] = "ZONE", ["title"] = "Своё название", ["description"] = "Своё описание", ["data"] = { ["zoneName"] = "Duskwood" } },',
       '\t\t\t},',
       '\t\t},',
       '\t},',
       '}',
     ].join('\n')
     const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
-    expect(journal?.memories).toHaveLength(3)
+    expect(journal?.memories[0]).toMatchObject({ title: 'Своё название', description: 'Своё описание' })
+  })
+
+  it('derives nothing when the data is missing, unknown or has no confirmed template', () => {
+    // no killer, no environmental cause; an unknown environmentalType; a
+    // non-numeric level; empty zone data; an achievement with no template —
+    // none of these may produce invented text
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["memories"] = {',
+      '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { ["cause"] = "ENVIRONMENTAL", ["environmentalType"] = "QUICKSAND" } },',
+      '\t\t\t\t{ ["type"] = "ZONE", ["data"] = { } },',
+      '\t\t\t\t{ ["type"] = "LEVEL", ["data"] = { ["level"] = "many" } },',
+      '\t\t\t\t{ ["type"] = "PROFESSION_MILESTONE", ["data"] = { ["milestoneType"] = "MYSTERY" } },',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
+    expect(journal?.memories).toHaveLength(4)
     for (const memory of journal?.memories ?? []) {
       expect(memory.title).toBe('')
       expect(memory.description).toBe('')
@@ -210,7 +250,7 @@ describe('journal conversion', () => {
     })
     expect(view('Reached Level 6')).toMatchObject({
       title: 'Достигнут 6-й уровень',
-      description: 'Достигнут уровень 6.',
+      description: 'Путешествие продолжается.',
     })
     expect(view('25 quests completed')).toMatchObject({
       title: 'Выполнено заданий: 25',
@@ -219,6 +259,11 @@ describe('journal conversion', () => {
     expect(view('Entered The Deadmines')).toMatchObject({
       title: 'Вход в подземелье: The Deadmines',
       description: 'Впереди новая глава твоего путешествия.',
+    })
+    // boss encounter name stays verbatim; the killing blow is translated
+    expect(view('Edwin VanCleef')).toMatchObject({
+      typeLabel: 'Победа',
+      description: 'Последний удар: Pyroblast.',
     })
     // authored titles of manual notes and unknown types stay verbatim
     expect(view('Победа в дуэли: Рогнар').title).toBe('Победа в дуэли: Рогнар')
@@ -259,6 +304,34 @@ describe('journal conversion', () => {
     const plain = buildJournalFromSavedVariables(sv, 'Silvermoon:Thalorien')
     expect(plain?.journey.recovered).toBeUndefined()
 
+    // an uninitialized snapshot carries default values, not data — skip it
+    const uninitialized = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["recoveredHistory"] = { ["initialized"] = false, ["completedQuests"] = { ["count"] = 900 } },',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    expect(
+      buildJournalFromSavedVariables(mustRead(uninitialized), 'R:N')?.journey.recovered
+    ).toBeUndefined()
+
+    // missing initialized flag counts as not initialized
+    const noFlag = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["recoveredHistory"] = { ["played"] = { ["total"] = 100 } },',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    expect(buildJournalFromSavedVariables(mustRead(noFlag), 'R:N')?.journey.recovered).toBeUndefined()
+
     // partial snapshot: only the fields actually present are known;
     // played.total = 0 is a known zero, not an unknown
     const partial = [
@@ -273,6 +346,28 @@ describe('journal conversion', () => {
     ].join('\n')
     const partialJournal = buildJournalFromSavedVariables(mustRead(partial), 'R:N')
     expect(partialJournal?.journey.recovered).toEqual({ playedTotal: 0 })
+
+    // play time is seconds and must not be capped by the quest counter limit:
+    // a veteran account snapshot can exceed a million seconds
+    const veteran = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["recoveredHistory"] = { ["initialized"] = true, ["capturedAt"] = 1741000000,',
+      '\t\t\t\t["completedQuests"] = { ["count"] = 2500 }, ["played"] = { ["total"] = 18000000 },',
+      '\t\t\t\t["level"] = 70 },',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const veteranJournal = buildJournalFromSavedVariables(mustRead(veteran), 'R:N')
+    expect(veteranJournal?.journey.recovered).toEqual({
+      capturedAt: 1_741_000_000 * 1000,
+      completedQuests: 2500,
+      playedTotal: 18_000_000,
+      level: 70,
+    })
 
     // junk shapes yield nothing rather than wrong numbers
     const junk = [

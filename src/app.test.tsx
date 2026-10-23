@@ -228,7 +228,7 @@ describe('SavedVariables import (UI)', () => {
     expect(html).toContain('Thalorien')
     expect(html).toContain('Гордунни')
     expect(html).toContain('Silvermoon')
-    expect(html).toContain('воспоминаний: 11')
+    expect(html).toContain('воспоминаний: 14')
   })
 
   it('CharacterPicker in English mirrors the Russian view', () => {
@@ -246,7 +246,7 @@ describe('SavedVariables import (UI)', () => {
       />
     )
     expect(html).toContain('Choose a character')
-    expect(html).toContain('11 memories')
+    expect(html).toContain('14 memories')
     expect(html).toContain('2 favorite(s)')
   })
 
@@ -256,7 +256,7 @@ describe('SavedVariables import (UI)', () => {
     const journal = buildJournalFromSavedVariables(sv, aelirienKey)
     if (!journal) throw new Error('journal must build')
     expect(journal.character.name).toBe('Аэлириэн')
-    expect(journal.memories).toHaveLength(11)
+    expect(journal.memories).toHaveLength(14)
 
     const html = renderToString(
       <Book
@@ -265,7 +265,7 @@ describe('SavedVariables import (UI)', () => {
         onLangChange={() => undefined}
         onBack={() => undefined}
         journal={journal}
-        meta={{ kind: 'savedvariables' as const, schema: sv.schemaVersion, memories: 11 }}
+        meta={{ kind: 'savedvariables' as const, schema: sv.schemaVersion, memories: 14 }}
       />
     )
     // manual texts survive verbatim (newlines and quotes included)
@@ -276,9 +276,19 @@ describe('SavedVariables import (UI)', () => {
     expect(html).toContain('Открыта зона: Tirisfal Glades')
     expect(html).toContain('Пал в бою — Worgen Packleader')
     expect(html).toContain('Последний удар: Rake.')
+    expect(html).toContain('Пал в бою — Drowning') // environmental death
     expect(html).toContain('Достигнут 6-й уровень')
+    expect(html).toContain('Путешествие продолжается.') // MEMORY_DESCRIPTION_LEVEL
     expect(html).toContain('Выполнено заданий: 25')
     expect(html).toContain('Вход в подземелье: The Deadmines')
+    // boss victory: encounter name verbatim, killing blow translated
+    expect(html).toContain('Edwin VanCleef')
+    expect(html).toContain('Последний удар: Pyroblast.')
+    // profession milestones of both kinds (label is uppercased by CSS-free
+    // assert: renderToString keeps the raw text)
+    expect(html).toContain('Major Mana Potion')
+    expect(html).toContain('Этап профессии')
+    expect(html).toContain('Алхимия')
     // known types get RU labels; the unknown type keeps its own text
     expect(html).toContain('Зона открыта')
     expect(html).toContain('Смерть')
@@ -328,6 +338,6 @@ describe('SavedVariables import (UI)', () => {
     if (sv.status !== 'ok') throw new Error('fixture must parse')
     const journal = buildJournalFromSavedVariables(sv, aelirienKey)
     expect(journal).not.toBeNull()
-    expect(journal?.memories.length).toBe(11)
+    expect(journal?.memories.length).toBe(14)
   })
 })

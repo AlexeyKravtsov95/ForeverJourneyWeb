@@ -80,11 +80,14 @@ const TYPE_LABELS: Record<string, string> = {
   LEVEL: 'Level up',
   LEVEL_UP: 'Level up',
   VICTORY: 'Victory',
+  BOSS_VICTORY: 'Victory',
   INSTANCE: 'Instance',
   INSTANCE_ENTERED: 'Instance',
   QUEST: 'Quest milestone',
   QUEST_MILESTONE: 'Quest milestone',
   ACHIEVEMENT: 'Achievement',
+  PROFESSION_MILESTONE: 'Profession milestone',
+  REPUTATION_MILESTONE: 'Reputation milestone',
   MEMORY: 'Memory',
   MANUAL_MEMORY: 'Journal entry',
 }
@@ -128,17 +131,34 @@ function isMemoryRecord(value: LuaValue): value is LuaTable {
 }
 
 /**
- * Rebuilds the display text of automatic events from `memory.data` the same
- * way the addon's Memories.lua does at runtime. Only the template shapes the
- * real addon produces are used (they match the RU dictionaries in
- * src/lib/localize.ts, which then translate these exact strings); parameter
- * values are taken verbatim from the file and never invented — when the data
- * is missing, nothing is derived and the neutral type label is all the book
- * shows. Verified fields per review of the actual addon:
- * ZONE data.zoneName/location.name, LEVEL data.level, INSTANCE
- * data.instanceName/location.name, DEATH data.killerName/killerNameRaw plus
- * the killing-spell field when present.
+ * Rebuilds the display text of automatic events from `memory.data` following
+ * the addon's own handlers (Memories.lua, BossVictoryMilestones.lua,
+ * ProfessionMilestones.lua, QuestMilestones.lua; shapes confirmed by the
+ * PR review of the real addon). Template forms match the RU dictionaries in
+ * src/lib/localize.ts, which translate these exact strings; parameter values
+ * are taken verbatim from the file and never invented. When the file carries
+ * no parameter for a template, the neutral description
+ * (MEMORY_DESCRIPTION_LEVEL-style "Your journey continues.") is used and no
+ * title is made up.
  */
+const NEUTRAL_DESCRIPTION = 'Your journey continues.'
+
+/** Environmental death causes the game actually reports (data.cause == "ENVIRONMENTAL"). */
+const ENVIRONMENTAL_TYPES = new Set([
+  'DROWNING',
+  'FALLING',
+  'FALL',
+  'FATIGUE',
+  'FIRE',
+  'LAVA',
+  'SLIME',
+])
+
+function humanizeCode(code: string): string {
+  const words = code.trim().replace(/_+/g, ' ').toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 function deriveEventText(
   type: string,
   data: LuaTable | null,
@@ -163,7 +183,6 @@ function deriveEventText(
     }
     return undefined
   }
-  const killingSpell = (): string => field('spellName') || field('spell') || field('finalBlow')
   const none = { title: '', description: '' }
 
   switch (upper) {
@@ -177,9 +196,10 @@ function deriveEventText(
     }
     case 'LEVEL':
     case 'LEVEL_UP': {
+      // MEMORY_DESCRIPTION_LEVEL is the generic "Your journey continues."
       const level = count('level')
       return level !== undefined
-        ? { title: `Reached Level ${level}`, description: `Reached level ${level}.` }
+        ? { title: `Reached Level ${level}`, description: NEUTRAL_DESCRIPTION }
         : none
     }
     case 'INSTANCE':
@@ -193,9 +213,16 @@ function deriveEventText(
         : none
     }
     case 'DEATH': {
-      const enemy = field('killerName') || field('killerNameRaw')
-      if (!enemy) return none // environmental deaths have no confirmed template
-      const spell = killingSpell()
+      // combat deaths name the killer; environmental deaths (data.cause ==
+      // "ENVIRONMENTAL") name a whitelisted environmentalType instead
+      let enemy = field('killerName') || field('killerNameRaw')
+      if (!enemy && field('cause').toUpperCase() === 'ENVIRONMENTAL') {
+        const kind = field('environmentalType').toUpperCase()
+        if (ENVIRONMENTAL_TYPES.has(kind)) enemy = humanizeCode(kind)
+      }
+      if (!enemy) return none
+      // the killing spell lives in data.spellName — the only confirmed field
+      const spell = field('spellName')
       return {
         title: `Fell in battle — ${enemy}`,
         description: spell ? `Final blow: ${spell}.` : 'Every journey has its setbacks.',
@@ -213,13 +240,24 @@ function deriveEventText(
     }
     case 'VICTORY':
     case 'BOSS_VICTORY': {
-      // the boss-name title template is not confirmed — only the type's own
-      // description constants are restored, boss/spell names stay verbatim
-      const spell = killingSpell()
+      // BossVictoryMilestones.lua titles the entry with data.encounterName;
+      // the killing blow spell is data.spellName
+      const encounter = field('encounterName')
+      const spell = field('spellName')
       return {
-        title: '',
+        title: encounter,
         description: spell ? `Final blow: ${spell}.` : 'The battle ended in victory.',
       }
+    }
+    case 'PROFESSION_MILESTONE': {
+      // ProfessionMilestones.lua stores the kind (LEARNED or MILESTONE);
+      // learned entries name the thing learned, rank entries the profession
+      const kind = (field('milestoneType') || field('kind')).toUpperCase()
+      const profession = field('professionName') || field('profession')
+      const learned = field('spellName') || field('itemName') || field('recipeName')
+      const title =
+        kind === 'LEARNED' ? learned || profession : kind === 'MILESTONE' ? profession : ''
+      return title ? { title, description: NEUTRAL_DESCRIPTION } : none
     }
     default:
       return none
@@ -390,24 +428,44 @@ export function buildJournalFromSavedVariables(
 
 /**
  * `character.recoveredHistory` is a snapshot captured when the addon first saw
- * the character — historical, not live. Its values are preserved in the model
- * but must never be shown as current stats (the book leaves the
- * quests/play-time tiles hidden). Only fields actually present and numeric
- * are treated as known; `initialized` alone carries no numbers and is not
- * stored.
+ * the character — historical, not live. Only a snapshot the addon marked
+ * `initialized = true` is trusted: without initialization the zeros are
+ * default values, not a real capture. Fields are validated by their own rules
+ * (play time is seconds and must not be squeezed into the quest counter cap);
+ * each present-and-valid field is known, everything else stays unknown. The
+ * snapshot is preserved in the model but never shown as current stats.
  */
+
+/** /played in seconds; two billion seconds ≈ 63 years of play — absurd but finite. */
+function asPlayedSeconds(value: LuaValue | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined
+  return Math.min(Math.floor(value), 2_000_000_000)
+}
+
+/** Quest counters: non-negative integers within the journal's quest cap. */
+function asQuestCount(value: LuaValue | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined
+  return Math.min(Math.floor(value), 10_000_000)
+}
+
+/** Character level: positive integers within the journal's level cap. */
+function asLevel(value: LuaValue | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) {
+    return undefined
+  }
+  if (value < 1 || value > 1000) return undefined
+  return value
+}
+
 function parseRecoveredHistory(value: LuaValue): { recovered?: RecoveredHistory } {
   const table = asTable(value)
-  if (!table) return {}
+  // a snapshot that was never initialized carries default values, not data
+  if (!table || table.initialized !== true) return {}
   const capturedAt = toTimestamp(table.capturedAt)
-  const completedQuests = asCount(asTable(table.completedQuests)?.count)
-  const playedTotal = asCount(asTable(table.played)?.total)
-  const levelRaw = table.level
-  const level =
-    typeof levelRaw === 'number' && Number.isInteger(levelRaw) && levelRaw > 0
-      ? levelRaw
-      : undefined
-  const known = {
+  const completedQuests = asQuestCount(asTable(table.completedQuests)?.count)
+  const playedTotal = asPlayedSeconds(asTable(table.played)?.total)
+  const level = asLevel(table.level)
+  const known: RecoveredHistory = {
     ...(capturedAt !== undefined ? { capturedAt } : {}),
     ...(completedQuests !== undefined ? { completedQuests } : {}),
     ...(playedTotal !== undefined ? { playedTotal } : {}),

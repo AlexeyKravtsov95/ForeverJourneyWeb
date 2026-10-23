@@ -92,6 +92,15 @@ const aelirienMemories = [
       note: 'Туман стелился по земле, а в воздухе пахло прелой листвой и чем-то ещё, неуловимо-печальным.',
     },
   }),
+  // environmental death: no killer, data.cause == "ENVIRONMENTAL" plus a known
+  // environmentalType — the only facts such a death carries
+  memory({
+    type: 'DEATH',
+    source: 'RECORDED',
+    timestamp: 1_741_250_000,
+    location: 'Озеро Лордамер',
+    data: { cause: 'ENVIRONMENTAL', environmentalType: 'DROWNING' },
+  }),
   memory({
     type: 'DEATH',
     source: 'RECORDED',
@@ -149,16 +158,30 @@ const aelirienMemories = [
     data: { opponent: 'Рогнар', result: 'win' },
     title: 'Победа в дуэли: Рогнар',
   }),
-  // future-proof: a memory that already carries computed display text —
-  // saved text always wins over anything derived from data
+  // boss victory (BossVictoryMilestones.lua): the title is data.encounterName,
+  // the killing blow is data.spellName
   memory({
-    type: 'VICTORY',
+    type: 'BOSS_VICTORY',
     source: 'RECORDED',
     timestamp: 1_741_500_000,
     location: 'Мертвые копи',
-    data: { bossName: 'VanCleef', finalBlow: 'Pyroblast' },
-    title: 'Victory in the Deadmines',
-    description: 'The battle ended in victory.',
+    data: { encounterName: 'Edwin VanCleef', spellName: 'Pyroblast' },
+  }),
+  // profession milestones (ProfessionMilestones.lua): the saved data carries
+  // the kind — LEARNED names the thing learned, MILESTONE the profession
+  memory({
+    type: 'PROFESSION_MILESTONE',
+    source: 'RECORDED',
+    timestamp: 1_741_600_000,
+    location: 'Подгород',
+    data: { milestoneType: 'LEARNED', professionName: 'Алхимия', spellName: 'Major Mana Potion' },
+  }),
+  memory({
+    type: 'PROFESSION_MILESTONE',
+    source: 'RECORDED',
+    timestamp: 1_741_700_000,
+    location: 'Подгород',
+    data: { milestoneType: 'MILESTONE', professionName: 'Алхимия', skillLevel: 150 },
   }),
   // undated entry: no timestamp at all
   memory({
