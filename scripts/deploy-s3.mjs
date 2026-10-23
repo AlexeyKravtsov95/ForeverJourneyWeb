@@ -1,19 +1,24 @@
-// Uploads the production build (dist/) to a VK Cloud Object Storage bucket.
-// Invoked by .github/workflows/deploy.yml; can also run locally for a manual
-// rollback — see docs/DEPLOYMENT.md.
+// Uploads the production build (dist/) to the production VK Cloud Object
+// Storage bucket. Invoked by .github/workflows/deploy.yml; can also run
+// locally for a manual rollback — see docs/DEPLOYMENT.md.
+//
+// The publish target is fixed in deploy-s3-lib.mjs (PRODUCTION_TARGET) and
+// validated before anything else: signed S3 requests never go to another
+// endpoint or bucket, whatever the environment says. Public reading is
+// granted by the bucket policy — objects are uploaded without any ACL.
 //
 // Environment:
-//   S3_ENDPOINT          required, e.g. https://hb.ru-msk.vkcloud-storage.ru
-//   S3_BUCKET            required, e.g. foreverjourney-web
+//   S3_ENDPOINT          required, must equal PRODUCTION_TARGET.endpoint
+//   S3_BUCKET            required, must equal PRODUCTION_TARGET.bucket
 //   S3_ACCESS_KEY_ID     required for a real run (GitHub secret VK_S3_ACCESS_KEY_ID)
 //   S3_SECRET_ACCESS_KEY required for a real run (GitHub secret VK_S3_SECRET_ACCESS_KEY)
-//   S3_REGION            optional, default ru-msk (signature region, any value works for VK Cloud)
+//   S3_REGION            optional, default ru-msk (signature region)
 //   DIST_DIR             optional, default dist
 //   DRY_RUN              optional, "true" prints the upload plan and exits without uploading
-//   S3_PUBLIC_READ       optional, default true — publishes objects with the public-read ACL
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import {
+  PRODUCTION_TARGET,
+  buildPutObjectInput,
+  isAllowedTarget,
   isValidBucketName,
   planUploads,
   validateEndpoint,
@@ -27,7 +32,6 @@ const {
   S3_REGION = 'ru-msk',
   DIST_DIR = 'dist',
   DRY_RUN,
-  S3_PUBLIC_READ = 'true',
 } = process.env
 
 function fail(message) {
@@ -42,6 +46,13 @@ const dryRun = DRY_RUN === 'true'
 const endpoint = validateEndpoint(S3_ENDPOINT, { network: !dryRun })
 if (!endpoint.ok) fail(endpoint.error)
 if (!isValidBucketName(S3_BUCKET)) fail(`S3_BUCKET is not a valid bucket name: ${S3_BUCKET}`)
+if (!isAllowedTarget(S3_BUCKET, S3_ENDPOINT)) {
+  fail(
+    `refusing to deploy outside the production target: ` +
+      `allowed bucket "${PRODUCTION_TARGET.bucket}" and endpoint "${PRODUCTION_TARGET.endpoint}", ` +
+      `got bucket "${S3_BUCKET}" and endpoint "${S3_ENDPOINT}"`,
+  )
+}
 
 let plan
 try {
@@ -51,9 +62,10 @@ try {
 }
 if (plan.length === 0) fail(`no files found in ${DIST_DIR}`)
 
-console.log(`bucket:   s3://${S3_BUCKET}`)
-console.log(`endpoint: ${endpoint.url.origin}`)
-console.log(`source:   ${DIST_DIR}/ (${plan.length} files)`)
+console.log(`bucket:          s3://${S3_BUCKET}`)
+console.log(`S3 endpoint:     ${endpoint.url.origin}`)
+console.log(`public URL:      ${PRODUCTION_TARGET.publicUrl}`)
+console.log(`source:          ${DIST_DIR}/ (${plan.length} files)`)
 for (const item of plan) {
   console.log(
     `  ${item.key}  [${item.contentType}]  ${item.cacheControl}  (${item.size} bytes)`,
@@ -86,19 +98,9 @@ const client = new S3Client({
   forcePathStyle: true,
 })
 
-const acl = S3_PUBLIC_READ === 'false' ? undefined : 'public-read'
-
 for (const item of plan) {
-  const body = await readFile(join(DIST_DIR, item.key))
   await client.send(
-    new PutObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: item.key,
-      Body: body,
-      ContentType: item.contentType,
-      CacheControl: item.cacheControl,
-      ACL: acl,
-    }),
+    new PutObjectCommand(await buildPutObjectInput(S3_BUCKET, DIST_DIR, item)),
   )
   console.log(`uploaded: ${item.key}`)
 }
@@ -123,10 +125,9 @@ if (missing.length > 0) {
   fail(`verification failed, missing keys: ${missing.map((m) => m.key).join(', ')}`)
 }
 
-const host = endpoint.url.hostname
-console.log(`\ndone: ${plan.length} objects verified in s3://${S3_BUCKET}.`)
-console.log(`object endpoint:   https://${S3_BUCKET}.${host}/index.html`)
-console.log(`website endpoint:  https://${S3_BUCKET}.hb-website.${host}/`)
+console.log(`\ndone: ${plan.length} objects uploaded and verified in s3://${S3_BUCKET}.`)
+console.log(`S3 endpoint:         ${endpoint.url.origin}`)
+console.log(`expected public URL: ${PRODUCTION_TARGET.publicUrl}`)
 console.log(
-  'note: publish the CDN domain over HTTPS as the site URL, not a bare endpoint above.',
+  'the public URL works only once the CDN and HTTPS are configured and verified — see docs/DEPLOYMENT.md, section 5.',
 )

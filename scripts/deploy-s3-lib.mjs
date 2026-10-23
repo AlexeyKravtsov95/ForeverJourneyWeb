@@ -2,6 +2,7 @@
 // dist/ tree, so npm test can cover MIME types, cache policy, endpoint
 // validation and bucket-name rules without touching the network.
 import { existsSync, readdirSync, statSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 
 // Explicit content types for everything a Vite build of this project emits
@@ -55,6 +56,26 @@ export function isValidBucketName(name) {
   return typeof name === 'string' && BUCKET_RE.test(name) && !name.includes('..')
 }
 
+// The one production publish target. The deploy refuses to send signed S3
+// requests anywhere else, no matter what environment variables say — the
+// allowlist is checked before the S3 client is created.
+export const PRODUCTION_TARGET = {
+  bucket: 'foreverjourney-web',
+  endpoint: 'https://hb.ru-msk.vkcloud-storage.ru',
+  publicUrl: 'https://journal.mythweld.com',
+}
+
+export function isAllowedTarget(bucket, endpoint) {
+  if (bucket !== PRODUCTION_TARGET.bucket) return false
+  let origin = ''
+  try {
+    origin = new URL(endpoint).origin
+  } catch {
+    return false
+  }
+  return origin === new URL(PRODUCTION_TARGET.endpoint).origin
+}
+
 function isIPv4(host) {
   const parts = host.split('.')
   return (
@@ -90,9 +111,10 @@ export function isPrivateHost(hostname) {
   return false
 }
 
-// The deploy script only talks to http/https endpoints. `network: true`
-// (real uploads) additionally rejects private/loopback/reserved hosts;
-// dry runs skip that check because no request is ever made.
+// The deploy script only talks to http/https endpoints. Real uploads
+// (`network: true`) must use HTTPS and are additionally checked against
+// loopback/private/reserved addresses; dry runs make no request at all, so
+// they tolerate plain http for inspecting a plan.
 export function validateEndpoint(raw, { network = true } = {}) {
   let url
   try {
@@ -105,6 +127,9 @@ export function validateEndpoint(raw, { network = true } = {}) {
   }
   if (url.username || url.password) {
     return { ok: false, error: 'endpoint URL must not contain credentials' }
+  }
+  if (network && url.protocol !== 'https:') {
+    return { ok: false, error: 'production uploads require an https endpoint' }
   }
   if (network && isPrivateHost(url.hostname)) {
     return {
@@ -145,4 +170,17 @@ export function planUploads(distDir) {
     cacheControl: cacheControlFor(key),
     size: statSync(join(distDir, key)).size,
   }))
+}
+
+// The full PutObjectCommand input. Deliberately carries no ACL: public
+// reading is granted by the bucket policy (anonymous s3:GetObject only),
+// objects stay under the bucket owner's control.
+export async function buildPutObjectInput(bucket, distDir, item) {
+  return {
+    Bucket: bucket,
+    Key: item.key,
+    Body: await readFile(join(distDir, item.key)),
+    ContentType: item.contentType,
+    CacheControl: item.cacheControl,
+  }
 }
