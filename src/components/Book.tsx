@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import type { ImportMeta } from '../lib/fjbook'
 import type { Journal } from '../lib/journal'
 import { buildChapters, type Chapter } from '../lib/chapters'
 import { toRoman } from '../lib/format'
@@ -10,12 +9,17 @@ import Introduction from './Introduction'
 import MemoryEntry from './MemoryEntry'
 import { Crest, Divider } from './Ornaments'
 
+/** Which way the journal got into the app — shown (and localized) in the toolbar. */
+export type ImportSummary =
+  | { kind: 'fjbook'; parts: number }
+  | { kind: 'savedvariables'; schema: number; memories: number }
+
 interface Props {
   tr: Strings
   lang: Lang
   onLangChange: (lang: Lang) => void
   journal: Journal
-  meta: ImportMeta
+  meta: ImportSummary
   onBack: () => void
 }
 
@@ -47,7 +51,11 @@ export default function Book({ tr, lang, onLangChange, journal, meta, onBack }: 
         <button type="button" className="toolbar__btn" onClick={onBack}>
           ← {tr.toolbarBack}
         </button>
-        <span className="toolbar__meta">{fmt(tr.importedMeta, { parts: meta.parts })}</span>
+        <span className="toolbar__meta">
+          {meta.kind === 'fjbook'
+            ? fmt(tr.importedMeta, { parts: meta.parts })
+            : fmt(tr.svImportedMeta, { schema: meta.schema, memories: meta.memories })}
+        </span>
         <div className="toolbar__right">
           <div className="lang-switch" role="group" aria-label="Language">
             <button

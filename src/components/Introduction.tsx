@@ -24,9 +24,17 @@ export default function Introduction({ journal, tr, lang }: Props) {
     ...(character.level > 0
       ? [{ label: tr.statLevel, value: String(character.level) }]
       : []),
-    { label: tr.statDeaths, value: String(journey.deaths) },
-    { label: tr.statQuests, value: String(journey.completedQuests) },
-    { label: tr.statPlayed, value: formatPlayed(journey.totalPlayed, lang) },
+    // Stats the import could not provide stay hidden — an unknown value must
+    // not masquerade as a trustworthy 0 (SavedVariables has no quest/played data).
+    ...(journey.deaths !== undefined
+      ? [{ label: tr.statDeaths, value: String(journey.deaths) }]
+      : []),
+    ...(journey.completedQuests !== undefined
+      ? [{ label: tr.statQuests, value: String(journey.completedQuests) }]
+      : []),
+    ...(journey.totalPlayed !== undefined
+      ? [{ label: tr.statPlayed, value: formatPlayed(journey.totalPlayed, lang) }]
+      : []),
     { label: tr.statMemories, value: String(memories.length) },
     ...(favorites > 0 ? [{ label: tr.statFavorites, value: String(favorites) }] : []),
   ]

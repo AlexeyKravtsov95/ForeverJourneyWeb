@@ -368,9 +368,17 @@ function Introduction({ journal, tr, lang }: BookDocumentProps) {
     ...(character.level > 0
       ? ([[tr.statLevel, String(character.level)]] as Array<[string, string]>)
       : []),
-    [tr.statDeaths, String(journey.deaths)],
-    [tr.statQuests, String(journey.completedQuests)],
-    [tr.statPlayed, formatPlayed(journey.totalPlayed, lang)],
+    // hidden when the import could not provide them (SavedVariables), so an
+    // unknown value never shows up as a trustworthy 0
+    ...(journey.deaths !== undefined
+      ? ([[tr.statDeaths, String(journey.deaths)]] as Array<[string, string]>)
+      : []),
+    ...(journey.completedQuests !== undefined
+      ? ([[tr.statQuests, String(journey.completedQuests)]] as Array<[string, string]>)
+      : []),
+    ...(journey.totalPlayed !== undefined
+      ? ([[tr.statPlayed, formatPlayed(journey.totalPlayed, lang)]] as Array<[string, string]>)
+      : []),
     [tr.statMemories, String(memories.length)],
     ...(favorites > 0
       ? ([[tr.statFavorites, String(favorites)]] as Array<[string, string]>)

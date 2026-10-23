@@ -14,9 +14,14 @@ export interface JournalCharacter {
 
 export interface JournalJourney {
   startedAt?: number
-  deaths: number
-  completedQuests: number
-  totalPlayed: number
+  /**
+   * Stats the source export could not provide stay undefined and are hidden
+   * by the book (a missing value must not be shown as a trustworthy 0).
+   * FJBOOK1 always carries all three, so existing imports render as before.
+   */
+  deaths?: number
+  completedQuests?: number
+  totalPlayed?: number
 }
 
 export interface JournalMemory {

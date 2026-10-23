@@ -1,20 +1,35 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
+import { readFileSync } from 'node:fs'
 import App from './App'
 import Book from './components/Book'
+import CharacterPicker from './components/CharacterPicker'
 import Landing from './components/Landing'
 import { buildDemoCode, demoJournal } from './demo/demoJournal'
 import { strings } from './i18n'
-import { importJournal, type ImportMeta } from './lib/fjbook'
+import { importJournal } from './lib/fjbook'
 import type { Journal } from './lib/journal'
+import { buildJournalFromSavedVariables, readSavedVariables } from './lib/savedvariables'
 
-const meta: ImportMeta = { parts: 4, decodedBytes: 4096, checksum: 1 }
+const fjMeta = { kind: 'fjbook' as const, parts: 4 }
+
+const fixtureLua = () =>
+  readFileSync(new URL('../fixtures/savedvariables/ForeverJourney.lua', import.meta.url), 'utf8')
+
+const landing = (lang: 'en' | 'ru') =>
+  renderToString(
+    <Landing
+      tr={strings[lang]}
+      lang={lang}
+      onLangChange={() => undefined}
+      onImported={() => undefined}
+      onSavedVariables={() => undefined}
+    />
+  )
 
 describe('rendering', () => {
   it('Landing shows the brand, subtitle, import and demo controls in English', () => {
-    const html = renderToString(
-      <Landing tr={strings.en} lang="en" onLangChange={() => undefined} onImported={() => undefined} />
-    )
+    const html = landing('en')
     expect(html).toContain('Forever Journey')
     expect(html).toContain('Turn your adventures into a story worth keeping')
     expect(html).toContain('Import Journal')
@@ -22,11 +37,25 @@ describe('rendering', () => {
   })
 
   it('Landing renders fully in Russian', () => {
-    const html = renderToString(
-      <Landing tr={strings.ru} lang="ru" onLangChange={() => undefined} onImported={() => undefined} />
-    )
+    const html = landing('ru')
     expect(html).toContain('Импортировать журнал')
     expect(html).toContain('Демо-журнал')
+  })
+
+  it('Landing offers both import ways with the SavedVariables path instruction', () => {
+    const html = landing('en')
+    expect(html).toContain('Import SavedVariables')
+    expect(html).toContain('Paste export code')
+    expect(html).toContain('WTF/Account/&lt;ACCOUNT&gt;/SavedVariables/ForeverJourney.lua')
+    expect(html).toContain('/reload')
+    expect(html).toContain('type="file"')
+  })
+
+  it('Landing показывает оба способа и путь к файлу на русском', () => {
+    const html = landing('ru')
+    expect(html).toContain('Импортировать SavedVariables')
+    expect(html).toContain('Вставить экспортный код')
+    expect(html).toContain('WTF/Account/&lt;ACCOUNT&gt;/SavedVariables/ForeverJourney.lua')
   })
 
   it('Book renders cover, introduction and memories with Cyrillic notes', () => {
@@ -37,7 +66,7 @@ describe('rendering', () => {
         onLangChange={() => undefined}
         onBack={() => undefined}
         journal={demoJournal}
-        meta={meta}
+        meta={fjMeta}
       />
     )
     expect(html).toContain('My Journey')
@@ -55,7 +84,7 @@ describe('rendering', () => {
         onLangChange={() => undefined}
         onBack={() => undefined}
         journal={demoJournal}
-        meta={meta}
+        meta={fjMeta}
       />
     )
     expect(html).toContain('Зона открыта')
@@ -147,7 +176,7 @@ describe('manual memory markers (web preview)', () => {
         onLangChange={() => undefined}
         onBack={() => undefined}
         journal={markerJournal}
-        meta={meta}
+        meta={fjMeta}
       />
     )
     expect(html).toContain('Reached Level 20') // manual title kept
@@ -165,11 +194,128 @@ describe('manual memory markers (web preview)', () => {
         onLangChange={() => undefined}
         onBack={() => undefined}
         journal={markerJournal}
-        meta={meta}
+        meta={fjMeta}
       />
     )
     expect(html).toContain('Reached Level 20')
     expect(html).toContain('Your journey continues.')
     expect(html).toContain('MEMORY')
+  })
+})
+
+describe('SavedVariables import (UI)', () => {
+  const readFixture = () => readSavedVariables(fixtureLua())
+  const aelirienKey = 'Гордунни:Аэлириэн'
+
+  it('CharacterPicker lists every character with realm, counts and dates', () => {
+    const sv = readFixture()
+    if (sv.status !== 'ok') throw new Error('fixture must parse')
+    expect(sv.characters).toHaveLength(3)
+    const html = renderToString(
+      <CharacterPicker
+        tr={strings.ru}
+        lang="ru"
+        sv={sv}
+        fileName="ForeverJourney.lua"
+        onLangChange={() => undefined}
+        onPick={() => undefined}
+        onCancel={() => undefined}
+      />
+    )
+    expect(html).toContain('Выберите персонажа')
+    expect(html).toContain('Аэлириэн')
+    expect(html).toContain('Мрограмар')
+    expect(html).toContain('Thalorien')
+    expect(html).toContain('Гордунни')
+    expect(html).toContain('Silvermoon')
+    expect(html).toContain('воспоминаний: 10')
+  })
+
+  it('CharacterPicker in English mirrors the Russian view', () => {
+    const sv = readFixture()
+    if (sv.status !== 'ok') throw new Error('fixture must parse')
+    const html = renderToString(
+      <CharacterPicker
+        tr={strings.en}
+        lang="en"
+        sv={sv}
+        fileName="ForeverJourney.lua"
+        onLangChange={() => undefined}
+        onPick={() => undefined}
+        onCancel={() => undefined}
+      />
+    )
+    expect(html).toContain('Choose a character')
+    expect(html).toContain('10 memories')
+    expect(html).toContain('2 favorite(s)')
+  })
+
+  it('a picked character renders a full book with hidden unknown stats', () => {
+    const sv = readFixture()
+    if (sv.status !== 'ok') throw new Error('fixture must parse')
+    const journal = buildJournalFromSavedVariables(sv, aelirienKey)
+    if (!journal) throw new Error('journal must build')
+    expect(journal.character.name).toBe('Аэлириэн')
+    expect(journal.memories).toHaveLength(10)
+
+    const html = renderToString(
+      <Book
+        tr={strings.ru}
+        lang="ru"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={journal}
+        meta={{ kind: 'savedvariables' as const, schema: sv.schemaVersion, memories: 10 }}
+      />
+    )
+    // manual texts survive verbatim (newlines and quotes included)
+    expect(html).toContain('Первая ночь в Тирисфале')
+    expect(html).toContain('Первая запись.')
+    expect(html).toContain('Табличка на мосту')
+    // known types get RU labels; the unknown type keeps its own text
+    expect(html).toContain('Зона открыта')
+    expect(html).toContain('Смерть')
+    expect(html).toContain('Новый уровень')
+    expect(html).toContain('PVP DUEL')
+    // SavedVariables has no level/race/class/quests/play time — no fake zeros
+    expect(html).not.toContain('Квестов выполнено')
+    expect(html).not.toContain('Времени в игре')
+    expect(html).not.toContain('Уровень</span>')
+    // the addon's own death counter is shown
+    expect(html).toContain('Смертей')
+  })
+
+  it('an empty character renders the empty chronicle without fake stats', () => {
+    const sv = readFixture()
+    if (sv.status !== 'ok') throw new Error('fixture must parse')
+    const journal = buildJournalFromSavedVariables(sv, 'Гордунни:Мрограмар')
+    if (!journal) throw new Error('journal must build')
+    expect(journal.memories).toHaveLength(0)
+    const html = renderToString(
+      <Book
+        tr={strings.ru}
+        lang="ru"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={journal}
+        meta={{ kind: 'savedvariables' as const, schema: 3, memories: 0 }}
+      />
+    )
+    expect(html).toContain('Летопись ждёт первой записи.')
+    // stats.deaths = 0 in the file → the addon counter says zero, it may show 0
+    expect(html).not.toContain('Квестов выполнено')
+    expect(html).not.toContain('Времени в игре')
+  })
+
+  it('the whole SavedVariables pipeline runs without touching the network', async () => {
+    const explodingFetch = () => {
+      throw new Error('network access during SavedVariables import')
+    }
+    vi.stubGlobal('fetch', explodingFetch)
+    const sv = readSavedVariables(fixtureLua())
+    if (sv.status !== 'ok') throw new Error('fixture must parse')
+    const journal = buildJournalFromSavedVariables(sv, aelirienKey)
+    expect(journal).not.toBeNull()
+    expect(journal?.memories.length).toBe(10)
   })
 })
