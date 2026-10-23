@@ -2,11 +2,20 @@ import type { ImportErrorCode } from './lib/fjbook'
 
 export type Lang = 'en' | 'ru'
 
-export function detectLang(): Lang {
-  if (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('ru')) {
-    return 'ru'
-  }
-  return 'en'
+/** The browser language APIs detectLang() reads; most browsers provide both. */
+export interface LangNav {
+  /** Ordered preferences, most preferred first. */
+  languages?: readonly string[]
+  /** The single best preference. */
+  language?: string
+}
+
+export function detectLang(nav?: LangNav): Lang {
+  const source = nav ?? (typeof navigator !== 'undefined' ? navigator : undefined)
+  // navigator.languages[0] is the user's top preference; older browsers only
+  // expose navigator.language. Everything non-Russian maps to English.
+  const preferred = source?.languages?.[0] ?? source?.language
+  return preferred?.toLowerCase().split(/[-_]/)[0] === 'ru' ? 'ru' : 'en'
 }
 
 /** Replaces {placeholders} in a translation string. */
