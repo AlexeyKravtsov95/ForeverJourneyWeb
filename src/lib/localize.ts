@@ -39,6 +39,25 @@ const DESCRIPTIONS_RU: Record<string, string> = {
   'Another chapter of your journey lies within.': 'Впереди новая глава твоего путешествия.',
   'Another important questing milestone has been reached.':
     'Достигнут ещё один важный этап выполнения заданий.',
+  'A new profession became part of the journey.': 'Новая профессия стала частью путешествия.',
+  'A new profession milestone has been reached.': 'Достигнут новый этап профессии.',
+}
+
+/**
+ * Addon-generated titles without a parameter, matched exactly: the
+ * environmental death titles (Memories.lua ENVIRONMENT_TITLE_KEYS), the
+ * generic "Fell in battle" fallback and the boss "Unknown boss" fallback
+ * (BossVictoryMilestones.lua).
+ */
+const EXACT_TITLES_RU: Record<string, string> = {
+  'Fell in battle': 'Пал в бою',
+  Drowned: 'Утонул',
+  'Fell from a great height': 'Упал с большой высоты',
+  'Succumbed to fatigue': 'Изнемог от усталости',
+  'Burned to death': 'Сгорел заживо',
+  'Consumed by lava': 'Погиб в лаве',
+  'Dissolved in slime': 'Растворился в слизи',
+  'Unknown boss': 'Неизвестный босс',
 }
 
 /**
@@ -55,6 +74,9 @@ const TITLE_PATTERNS_RU: Array<[RegExp, (match: RegExpMatchArray) => string]> = 
   [/^Entered (.+)$/, (m) => `Вход в подземелье: ${m[1]}`],
   [/^(\d+) quests completed$/, (m) => `Выполнено заданий: ${m[1]}`],
   [/^Level (\d+)$/, (m) => `Уровень ${m[1]}`],
+  // ProfessionMilestones.lua templates
+  [/^Learned profession: (.+)$/, (m) => `Изучена профессия: ${m[1]}`],
+  [/^(.+) reached skill (\d+)$/, (m) => `${m[1]}: навык ${m[2]}`],
 ]
 
 /** Addon-generated descriptions with a parameter, e.g. "Final blow: Pyroblast." */
@@ -135,6 +157,7 @@ function isSystemEntry(memory: JournalMemory): boolean {
 function translateTitle(title: string, memory: JournalMemory, lang: Lang): string {
   if (lang !== 'ru' || !isSystemEntry(memory)) return title
   const trimmed = title.trim()
+  if (EXACT_TITLES_RU[trimmed]) return EXACT_TITLES_RU[trimmed]
   for (const [pattern, translate] of TITLE_PATTERNS_RU) {
     const match = trimmed.match(pattern)
     if (match) return translate(match)

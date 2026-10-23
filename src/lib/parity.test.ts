@@ -1,10 +1,22 @@
-// Parity of the two import ways (review round 3): the same logical journal
-// events are described twice — as a hand-written FJBOOK1 journal pushed
-// through the site's reference exporter and the real importJournal()
-// pipeline, and as the synthetic SavedVariables fixture parsed by
-// readSavedVariables() + buildJournalFromSavedVariables(). After
-// normalization both journals must carry identical events in identical order,
-// and localizeMemory() must render both identically for RU and EN.
+// Parity with the real Lua addon handlers (final review round).
+//
+// ADDON_REFERENCE below is the specification: for every event type it holds
+// the raw memory record exactly as the addon's handlers save it
+// (Memories.lua, BossVictoryMilestones.lua, ProfessionMilestones.lua,
+// QuestMilestones.lua) and the display text those handlers produce
+// (GetDisplayTitle/GetDisplayDescription), in English and in the RU rendering
+// the game shows. The table is written from the addon spec and shared by both
+// tests — it does NOT depend on the site converter, so the converter is
+// measured against the addon, not against itself.
+//
+// Test 1 runs each record through the real SavedVariables pipeline
+// (readSavedVariables + buildJournalFromSavedVariables) and compares with the
+// reference, EN directly and RU through localizeMemory.
+//
+// Test 2 builds an FJBOOK1 journal FROM THE REFERENCE (never from converter
+// output), pushes it through the real FJBOOK1 pipeline (reference exporter →
+// importJournal: parts, Adler-32, base64, JSON, validation) and verifies both
+// pipelines produce identical normalized events in identical order.
 //
 // Fields physically absent from SavedVariables are excluded from the
 // comparison and documented here and in docs/FJ-WEB-05.md:
@@ -13,236 +25,431 @@
 //   recoveredHistory is a historical snapshot and is never a current value);
 // - addonVersion / locale / exportedAt (export envelope, not event data).
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
 import { encodeJournalCode } from './encode'
 import { importJournal } from './fjbook'
 import { buildJournalFromSavedVariables, readSavedVariables } from './savedvariables'
 import { localizeMemory } from './localize'
 import type { Journal, JournalMemory } from './journal'
 
-const s = (unix: number) => unix // the addon export carries Unix seconds
+/** Raw memory.data as the addon saves it — plain JSON for readability. */
+interface RawRecord {
+  type: string
+  source?: string
+  data?: Record<string, unknown>
+  title?: string
+  personalNote?: string
+  favorite?: boolean
+  location?: string
+}
 
-// The display events the SavedVariables fixture describes, exactly as the
-// importer is expected to rebuild them (derivation rules included).
-const expectedMemories: JournalMemory[] = [
+interface ExpectedText {
+  title: string
+  description: string
+  typeLabel: string
+}
+
+interface ReferenceCase extends RawRecord {
+  name: string
+  en: ExpectedText
+  ru: ExpectedText
+}
+
+/** Memories.lua ENVIRONMENT_TITLE_KEYS — every environmental cause has its own title. */
+const ENVIRONMENTAL_REFERENCE: Array<[string, string, string]> = [
+  // [environmentalType, EN title, RU title]
+  ['DROWNING', 'Drowned', 'Утонул'],
+  ['FALLING', 'Fell from a great height', 'Упал с большой высоты'],
+  ['FATIGUE', 'Succumbed to fatigue', 'Изнемог от усталости'],
+  ['FIRE', 'Burned to death', 'Сгорел заживо'],
+  ['LAVA', 'Consumed by lava', 'Погиб в лаве'],
+  ['SLIME', 'Dissolved in slime', 'Растворился в слизи'],
+]
+
+const SETBACKS = {
+  en: 'Every journey has its setbacks.',
+  ru: 'На пути каждого героя случаются поражения.',
+}
+
+const ADDON_REFERENCE: ReferenceCase[] = [
   {
+    name: 'zone discovery',
     type: 'ZONE',
-    typeLabel: 'Zone discovered',
     source: 'RECORDED',
-    title: 'Discovered Tirisfal Glades',
-    description: 'A new place became part of your journey.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_200_000),
     location: 'Тирисфальские леса',
+    data: { zoneName: 'Tirisfal Glades' },
+    en: {
+      title: 'Discovered Tirisfal Glades',
+      description: 'A new place became part of your journey.',
+      typeLabel: 'Zone discovered',
+    },
+    ru: {
+      title: 'Открыта зона: Tirisfal Glades',
+      description: 'Новое место стало частью твоего путешествия.',
+      typeLabel: 'Зона открыта',
+    },
   },
   {
-    type: 'MANUAL_MEMORY',
-    typeLabel: 'Journal entry',
-    source: 'USER',
-    title: 'Первая ночь в Тирисфале',
-    description:
-      'Туман стелился по земле, а в воздухе пахло прелой листвой и чем-то ещё, неуловимо-печальным.',
-    personalNote: 'Первая запись.\nВторая строка с "кавычками" и слэшем \\ назад.',
-    favorite: true,
-    timestamp: s(1_741_206_000),
-    location: 'Подгород',
-  },
-  {
-    type: 'DEATH',
-    typeLabel: 'Death',
-    source: 'RECORDED',
-    title: 'Fell in battle — Drowning',
-    description: 'Every journey has its setbacks.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_250_000),
-    location: 'Озеро Лордамер',
-  },
-  {
-    type: 'DEATH',
-    typeLabel: 'Death',
-    source: 'RECORDED',
-    title: 'Fell in battle — Worgen Packleader',
-    description: 'Final blow: Rake.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_290_000),
-    location: 'Серебряный бор',
-  },
-  {
+    name: 'level up',
     type: 'LEVEL',
-    typeLabel: 'Level up',
     source: 'RECORDED',
-    title: 'Reached Level 6',
-    description: 'Your journey continues.', // MEMORY_DESCRIPTION_LEVEL
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_300_000),
-    location: 'Серебряный бор',
+    data: { level: 6 },
+    en: {
+      title: 'Reached Level 6',
+      description: 'Your journey continues.', // MEMORY_DESCRIPTION_LEVEL
+      typeLabel: 'Level up',
+    },
+    ru: {
+      title: 'Достигнут 6-й уровень',
+      description: 'Путешествие продолжается.',
+      typeLabel: 'Новый уровень',
+    },
   },
   {
-    type: 'MANUAL_MEMORY',
-    typeLabel: 'Journal entry',
-    source: 'USER',
-    title: 'Табличка на мосту',
-    description: '«Смотри под ноги — мост шаткий». Кто-то выцарапал это ножом.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_310_000),
-    location: 'Подгород',
-  },
-  {
-    type: 'QUEST_MILESTONE',
-    typeLabel: 'Quest milestone',
-    source: 'RECORDED',
-    title: '25 quests completed',
-    description: 'Another important questing milestone has been reached.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_400_000),
-    location: 'Тирисфальские леса',
-  },
-  {
-    type: 'ZONE',
-    typeLabel: 'Zone discovered',
-    source: 'RECORDED',
-    title: 'Discovered Western Plaguelands',
-    description: 'A new place became part of your journey.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_400_000),
-    location: 'Western Plaguelands',
-  },
-  {
+    name: 'instance entered',
     type: 'INSTANCE',
-    typeLabel: 'Instance',
     source: 'RECORDED',
-    title: 'Entered The Deadmines',
-    description: 'Another chapter of your journey lies within.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_420_000),
     location: 'Мертвые копи',
+    data: { instanceName: 'The Deadmines' },
+    en: {
+      title: 'Entered The Deadmines',
+      description: 'Another chapter of your journey lies within.',
+      typeLabel: 'Instance',
+    },
+    ru: {
+      title: 'Вход в подземелье: The Deadmines',
+      description: 'Впереди новая глава твоего путешествия.',
+      typeLabel: 'Подземелье',
+    },
   },
   {
-    type: 'PVP_DUEL',
-    typeLabel: 'PVP DUEL',
+    name: 'death by killer with the killing spell',
+    type: 'DEATH',
     source: 'RECORDED',
-    title: 'Победа в дуэли: Рогнар',
-    description: '',
-    personalNote: 'Еле успел блок.',
-    favorite: true,
-    timestamp: s(1_741_450_000),
-    location: 'Подгород',
+    location: 'Серебряный бор',
+    data: { killerName: 'Worgen Packleader', killerNameRaw: 'Worgen Packleader', spellName: 'Rake' },
+    en: {
+      title: 'Fell in battle — Worgen Packleader',
+      description: 'Final blow: Rake.',
+      typeLabel: 'Death',
+    },
+    ru: {
+      title: 'Пал в бою — Worgen Packleader',
+      description: 'Последний удар: Rake.',
+      typeLabel: 'Смерть',
+    },
   },
   {
+    name: 'death by killer without a spell',
+    type: 'DEATH',
+    source: 'RECORDED',
+    data: { killerName: 'Murloc Tidehunter' },
+    en: {
+      title: 'Fell in battle — Murloc Tidehunter',
+      description: SETBACKS.en,
+      typeLabel: 'Death',
+    },
+    ru: {
+      title: 'Пал в бою — Murloc Tidehunter',
+      description: SETBACKS.ru,
+      typeLabel: 'Смерть',
+    },
+  },
+  {
+    name: 'death with only a spellID — no name may be invented',
+    type: 'DEATH',
+    source: 'RECORDED',
+    data: { killerName: 'Forest Spider', spellID: 12345 },
+    en: {
+      title: 'Fell in battle — Forest Spider',
+      description: SETBACKS.en, // spellID alone cannot name the spell
+      typeLabel: 'Death',
+    },
+    ru: {
+      title: 'Пал в бою — Forest Spider',
+      description: SETBACKS.ru,
+      typeLabel: 'Смерть',
+    },
+  },
+  ...ENVIRONMENTAL_REFERENCE.map<ReferenceCase>(([kind, enTitle, ruTitle]) => ({
+    name: `environmental death: ${kind}`,
+    type: 'DEATH',
+    source: 'RECORDED',
+    location: 'Тернистая долина',
+    data: { cause: 'ENVIRONMENTAL', environmentalType: kind },
+    en: { title: enTitle, description: SETBACKS.en, typeLabel: 'Death' },
+    ru: { title: ruTitle, description: SETBACKS.ru, typeLabel: 'Смерть' },
+  })),
+  {
+    name: 'death without a killer and without an environmental cause',
+    type: 'DEATH',
+    source: 'RECORDED',
+    data: {},
+    en: { title: 'Fell in battle', description: SETBACKS.en, typeLabel: 'Death' },
+    ru: { title: 'Пал в бою', description: SETBACKS.ru, typeLabel: 'Смерть' },
+  },
+  {
+    name: 'quest milestone',
+    type: 'QUEST_MILESTONE',
+    source: 'RECORDED',
+    location: 'Тирисфальские леса',
+    data: { quests: 25 },
+    en: {
+      title: '25 quests completed',
+      description: 'Another important questing milestone has been reached.',
+      typeLabel: 'Quest milestone',
+    },
+    ru: {
+      title: 'Выполнено заданий: 25',
+      description: 'Достигнут ещё один важный этап выполнения заданий.',
+      typeLabel: 'Этап заданий',
+    },
+  },
+  {
+    name: 'boss victory with an encounter name',
     type: 'BOSS_VICTORY',
-    typeLabel: 'Victory',
     source: 'RECORDED',
-    title: 'Edwin VanCleef', // data.encounterName
-    description: 'Final blow: Pyroblast.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_500_000),
     location: 'Мертвые копи',
+    // spellName is deliberately present: the boss handler ignores it
+    data: { encounterName: 'Edwin VanCleef', spellName: 'Pyroblast' },
+    en: {
+      title: 'Edwin VanCleef',
+      description: 'The battle ended in victory.',
+      typeLabel: 'Victory',
+    },
+    ru: {
+      title: 'Edwin VanCleef',
+      description: 'Битва завершилась победой.',
+      typeLabel: 'Победа',
+    },
   },
   {
-    type: 'PROFESSION_MILESTONE',
-    typeLabel: 'Profession milestone',
+    name: 'boss victory without an encounter name',
+    type: 'BOSS_VICTORY',
     source: 'RECORDED',
-    title: 'Major Mana Potion', // LEARNED names the thing learned
-    description: 'Your journey continues.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_600_000),
-    location: 'Подгород',
+    data: {},
+    en: {
+      title: 'Unknown boss',
+      description: 'The battle ended in victory.',
+      typeLabel: 'Victory',
+    },
+    ru: {
+      title: 'Неизвестный босс',
+      description: 'Битва завершилась победой.',
+      typeLabel: 'Победа',
+    },
   },
   {
+    name: 'profession milestone: learned',
     type: 'PROFESSION_MILESTONE',
-    typeLabel: 'Profession milestone',
     source: 'RECORDED',
-    title: 'Алхимия', // MILESTONE names the profession
-    description: 'Your journey continues.',
-    personalNote: '',
-    favorite: false,
-    timestamp: s(1_741_700_000),
     location: 'Подгород',
+    data: { kind: 'LEARNED', professionName: 'Алхимия', skillLine: 'alchemy', skillLevel: 1 },
+    en: {
+      title: 'Learned profession: Алхимия',
+      description: 'A new profession became part of the journey.',
+      typeLabel: 'Profession milestone',
+    },
+    ru: {
+      title: 'Изучена профессия: Алхимия',
+      description: 'Новая профессия стала частью путешествия.',
+      typeLabel: 'Этап профессии',
+    },
   },
   {
+    name: 'profession milestone: skill reached',
+    type: 'PROFESSION_MILESTONE',
+    source: 'RECORDED',
+    location: 'Подгород',
+    data: {
+      kind: 'MILESTONE',
+      professionName: 'Алхимия',
+      skillLine: 'alchemy',
+      skillLevel: 150,
+      milestone: 'Journeyman',
+    },
+    en: {
+      title: 'Алхимия reached skill 150',
+      description: 'A new profession milestone has been reached.',
+      typeLabel: 'Profession milestone',
+    },
+    ru: {
+      title: 'Алхимия: навык 150',
+      description: 'Достигнут новый этап профессии.',
+      typeLabel: 'Этап профессии',
+    },
+  },
+  {
+    name: 'manual memory keeps authored text verbatim',
     type: 'MANUAL_MEMORY',
-    typeLabel: 'Journal entry',
     source: 'USER',
-    title: 'Запись без даты',
-    description: 'Когда это было — уже не помню.',
-    personalNote: '',
-    favorite: false,
-    location: 'Лордерон',
+    location: 'Подгород',
+    favorite: true,
+    personalNote: 'Первая запись.\nВторая строка с "кавычками".',
+    data: { title: 'Первая ночь в Тирисфале', note: 'Туман стелился по земле.' },
+    en: {
+      title: 'Первая ночь в Тирисфале',
+      description: 'Туман стелился по земле.',
+      typeLabel: 'Journal entry',
+    },
+    ru: {
+      title: 'Первая ночь в Тирисфале',
+      description: 'Туман стелился по земле.',
+      typeLabel: 'Запись в дневнике',
+    },
+  },
+  {
+    name: 'unknown type keeps its own saved text',
+    type: 'PVP_DUEL',
+    source: 'RECORDED',
+    location: 'Подгород',
+    personalNote: 'Еле успел блок.',
+    data: { opponent: 'Рогнар', result: 'win' },
+    title: 'Победа в дуэли: Рогнар',
+    en: {
+      title: 'Победа в дуэли: Рогнар',
+      description: '',
+      typeLabel: 'PVP DUEL',
+    },
+    ru: {
+      title: 'Победа в дуэли: Рогнар',
+      description: '',
+      typeLabel: 'PVP DUEL',
+    },
   },
 ]
 
-const fjbookJournal: Journal = {
-  format: 'FJJOURNAL',
-  formatVersion: 1,
-  addonVersion: '',
-  locale: '',
-  character: { name: 'Аэлириэн', race: '', class: '', level: 0 },
-  journey: { startedAt: s(1_741_199_000), deaths: 1, completedQuests: 0, totalPlayed: 0 },
-  memories: expectedMemories,
-}
+// ---------- Lua source synthesis (the raw side, before any conversion) ----------
 
-const COMPARED_FIELDS = [
-  'type',
-  'typeLabel',
-  'source',
-  'title',
-  'description',
-  'personalNote',
-  'favorite',
-  'timestamp',
-  'location',
-] as const
-
-function importBoth(): { fj: Journal; sv: Journal } {
-  const code = encodeJournalCode(fjbookJournal, { partSize: 120, checksumStyle: 'hex-upper' })
-  const imported = importJournal(code)
-  if (imported.status !== 'ok') {
-    const detail = imported.status === 'error' ? imported.code : imported.status
-    throw new Error(`FJBOOK1 import failed: ${detail}`)
-  }
-  const lua = readFileSync(
-    new URL('../../fixtures/savedvariables/ForeverJourney.lua', import.meta.url),
-    'utf8'
+function luaString(text: string): string {
+  return (
+    '"' +
+    text
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t') +
+    '"'
   )
-  const sv = readSavedVariables(lua)
-  if (sv.status !== 'ok') throw new Error(`SavedVariables import failed: ${sv.code}`)
-  const journal = buildJournalFromSavedVariables(sv, 'Гордунни:Аэлириэн')
-  if (!journal) throw new Error('SavedVariables journal must build')
-  return { fj: imported.journal, sv: journal }
 }
 
-describe('import parity: FJBOOK1 vs SavedVariables', () => {
-  it('produces identical normalized events in identical order', () => {
-    const { fj, sv } = importBoth()
-    expect(sv.character.name).toBe(fj.character.name)
-    expect(sv.journey.startedAt).toBe(fj.journey.startedAt)
-    expect(sv.journey.deaths).toBe(fj.journey.deaths)
-    // quests / played time are excluded: no live values in SavedVariables
-    expect(sv.memories).toHaveLength(fj.memories.length)
-    fj.memories.forEach((expected, index) => {
-      const actual = sv.memories[index]
-      for (const field of COMPARED_FIELDS) {
+function luaValue(value: unknown): string {
+  if (typeof value === 'string') return luaString(value)
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (value && typeof value === 'object') {
+    const fields = Object.entries(value as Record<string, unknown>).map(
+      ([key, item]) => `[${luaString(key)}] = ${luaValue(item)}`
+    )
+    return fields.length ? `{\n${fields.join(',\n')},\n}` : '{ }'
+  }
+  return 'nil'
+}
+
+function recordToLua(record: RawRecord, timestamp: number): string {
+  const full = {
+    type: record.type,
+    ...(record.source !== undefined ? { source: record.source } : {}),
+    timestamp,
+    ...(record.location !== undefined ? { location: record.location } : {}),
+    ...(record.favorite ? { favorite: true } : {}),
+    ...(record.personalNote !== undefined ? { personalNote: record.personalNote } : {}),
+    ...(record.data !== undefined ? { data: record.data } : {}),
+    ...(record.title !== undefined ? { title: record.title } : {}),
+  }
+  return `\t\t\t\t${luaValue(full)},`
+}
+
+function buildLua(records: RawRecord[]): string {
+  const lines = ['ForeverJourneyDB = {', '\t["schemaVersion"] = 3,', '\t["characters"] = {', '\t\t["Гордунни:Эталон"] = {', '\t\t\t["createdAt"] = 1741000000,', '\t\t\t["memories"] = {']
+  records.forEach((record, index) => lines.push(recordToLua(record, 1_741_000_000 + index * 1000)))
+  lines.push('\t\t\t},', '\t\t},', '\t},', '}')
+  return lines.join('\n')
+}
+
+function convert(records: RawRecord[]): JournalMemory[] {
+  const sv = readSavedVariables(buildLua(records))
+  if (sv.status !== 'ok') throw new Error(`SavedVariables import failed: ${sv.code}`)
+  const journal = buildJournalFromSavedVariables(sv, 'Гордунни:Эталон')
+  if (!journal) throw new Error('journal must build')
+  return journal.memories
+}
+
+// ---------- tests ----------
+
+describe('addon handler reference (EN + RU)', () => {
+  for (const reference of ADDON_REFERENCE) {
+    it(`converts "${reference.name}" exactly like the addon`, () => {
+      const [memory] = convert([reference])
+      // English display text
+      expect(memory.title).toBe(reference.en.title)
+      expect(memory.description).toBe(reference.en.description)
+      expect(memory.typeLabel).toBe(reference.en.typeLabel)
+      // Russian display text through the localization layer
+      const ru = localizeMemory(memory, 'ru')
+      expect(ru.title).toBe(reference.ru.title)
+      expect(ru.description).toBe(reference.ru.description)
+      expect(ru.typeLabel).toBe(reference.ru.typeLabel)
+      // English through the same layer must stay as converted
+      const en = localizeMemory(memory, 'en')
+      expect(en.title).toBe(reference.en.title)
+      expect(en.description).toBe(reference.en.description)
+    })
+  }
+})
+
+describe('import parity: FJBOOK1 vs SavedVariables (reference-grounded)', () => {
+  it('both pipelines produce the reference events, identically and in order', () => {
+    // the FJBOOK1 journal is built FROM THE REFERENCE — never from converter
+    // output — so the comparison proves both pipelines against the addon
+    const referenceMemories: JournalMemory[] = ADDON_REFERENCE.map((reference, index) => ({
+      type: reference.type,
+      typeLabel: reference.en.typeLabel,
+      source: reference.source ?? '',
+      title: reference.en.title,
+      description: reference.en.description,
+      personalNote: reference.personalNote ?? '',
+      favorite: reference.favorite === true,
+      timestamp: (1_741_000_000 + index * 1000) * 1000,
+      location: reference.location ?? '',
+    }))
+    const fjbookJournal: Journal = {
+      format: 'FJJOURNAL',
+      formatVersion: 1,
+      addonVersion: '',
+      locale: '',
+      character: { name: 'Эталон', race: '', class: '', level: 0 },
+      journey: { startedAt: 1_741_000_000, deaths: 0, completedQuests: 0, totalPlayed: 0 },
+      memories: referenceMemories,
+    }
+
+    const code = encodeJournalCode(fjbookJournal, { partSize: 120, checksumStyle: 'hex-upper' })
+    const imported = importJournal(code)
+    if (imported.status !== 'ok') {
+      const detail = imported.status === 'error' ? imported.code : imported.status
+      throw new Error(`FJBOOK1 import failed: ${detail}`)
+    }
+    const converted = convert(ADDON_REFERENCE)
+
+    expect(converted).toHaveLength(imported.journal.memories.length)
+    const FIELDS = [
+      'type',
+      'typeLabel',
+      'source',
+      'title',
+      'description',
+      'personalNote',
+      'favorite',
+      'timestamp',
+      'location',
+    ] as const
+    imported.journal.memories.forEach((expected, index) => {
+      const actual = converted[index]
+      for (const field of FIELDS) {
         expect(actual[field]).toBe(expected[field])
       }
+      // identical RU/EN rendering after localization
+      expect(localizeMemory(actual, 'ru')).toEqual(localizeMemory(expected, 'ru'))
+      expect(localizeMemory(actual, 'en')).toEqual(localizeMemory(expected, 'en'))
     })
   })
-
-  for (const lang of ['en', 'ru'] as const) {
-    it(`renders both ways identically after localization (${lang.toUpperCase()})`, () => {
-      const { fj, sv } = importBoth()
-      fj.memories.forEach((expected, index) => {
-        expect(localizeMemory(sv.memories[index], lang)).toEqual(localizeMemory(expected, lang))
-      })
-    })
-  }
 })

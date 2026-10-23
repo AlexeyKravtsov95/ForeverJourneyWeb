@@ -93,7 +93,7 @@ const aelirienMemories = [
     },
   }),
   // environmental death: no killer, data.cause == "ENVIRONMENTAL" plus a known
-  // environmentalType — the only facts such a death carries
+  // environmentalType — each cause has its own title (ENVIRONMENT_TITLE_KEYS)
   memory({
     type: 'DEATH',
     source: 'RECORDED',
@@ -159,29 +159,29 @@ const aelirienMemories = [
     title: 'Победа в дуэли: Рогнар',
   }),
   // boss victory (BossVictoryMilestones.lua): the title is data.encounterName,
-  // the killing blow is data.spellName
+  // the description is a fixed localized string
   memory({
     type: 'BOSS_VICTORY',
     source: 'RECORDED',
     timestamp: 1_741_500_000,
     location: 'Мертвые копи',
-    data: { encounterName: 'Edwin VanCleef', spellName: 'Pyroblast' },
+    data: { encounterName: 'Edwin VanCleef' },
   }),
-  // profession milestones (ProfessionMilestones.lua): the saved data carries
-  // the kind — LEARNED names the thing learned, MILESTONE the profession
+  // profession milestones (ProfessionMilestones.lua): data.kind selects the
+  // template — LEARNED names the profession, MILESTONE adds the skill level
   memory({
     type: 'PROFESSION_MILESTONE',
     source: 'RECORDED',
     timestamp: 1_741_600_000,
     location: 'Подгород',
-    data: { milestoneType: 'LEARNED', professionName: 'Алхимия', spellName: 'Major Mana Potion' },
+    data: { kind: 'LEARNED', professionName: 'Алхимия', skillLine: 'alchemy', skillLevel: 1 },
   }),
   memory({
     type: 'PROFESSION_MILESTONE',
     source: 'RECORDED',
     timestamp: 1_741_700_000,
     location: 'Подгород',
-    data: { milestoneType: 'MILESTONE', professionName: 'Алхимия', skillLevel: 150 },
+    data: { kind: 'MILESTONE', professionName: 'Алхимия', skillLine: 'alchemy', skillLevel: 150, milestone: 'Journeyman' },
   }),
   // undated entry: no timestamp at all
   memory({

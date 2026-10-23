@@ -85,22 +85,34 @@ ForeverJourney.lua (байты файла)
   - `INSTANCE` — `data.instanceName` (fallback `data.instance`,
     `location.name`): «Entered {подземелье}» / «Вход в подземелье: {…}»;
   - `DEATH` — бой: `data.killerName` (fallback `killerNameRaw`) —
-    «Fell in battle — {враг}» / «Пал в бою — {враг}»; окружение:
-    `data.cause == "ENVIRONMENTAL"` + известный `environmentalType`
-    (DROWNING/FALLING/FALL/FATIGUE/FIRE/LAVA/SLIME) — тот же шаблон с
-    очеловеченным названием причины; убийца не выдумывается;
-    заклинание последнего удара — только реальное поле `data.spellName`
-    («Final blow: {заклинание}.» / «Последний удар: {…}.»), при отсутствии —
-    «Every journey has its setbacks.»;
+    «Fell in battle — {враг}» / «Пал в бою — {враг}»; окружение
+    (`data.cause == "ENVIRONMENTAL"`): точные заголовки
+    `ENVIRONMENT_TITLE_KEYS` — FALLING «Fell from a great height»/
+    «Упал с большой высоты», DROWNING «Drowned»/«Утонул», FATIGUE
+    «Succumbed to fatigue»/«Изнемог от усталости», FIRE «Burned to death»/
+    «Сгорел заживо», LAVA «Consumed by lava»/«Погиб в лаве», SLIME
+    «Dissolved in slime»/«Растворился в слизи»; искусственное
+    «Fell in battle — Drowning» не формируется; без убийцы и известной
+    причины — штатный общий заголовок «Fell in battle»/«Пал в бою»;
+    заклинание последнего удара — только сохранённое `data.spellName`
+    («Final blow: {заклинание}.»); одиночный `spellID` в имя не превращается,
+    при его отсутствии — «Every journey has its setbacks.»;
   - `QUEST_MILESTONE` — счётчик (`quests`/`questCount`/`completedQuests`/`count`):
     «{n} quests completed» / «Выполнено заданий: {n}»;
-  - `VICTORY`/`BOSS_VICTORY` — заголовок `BOSS_VICTORY` = `data.encounterName`
-    (дословно, без выдуманного шаблона); описания — «The battle ended in
-    victory.» и «Final blow: {spellName}.»;
-  - `PROFESSION_MILESTONE` — вид из фактически сохранённых данных:
-    `LEARNED` называет изученное (`spellName`/`itemName`/`recipeName`),
-    `MILESTONE` — профессию (`professionName`/`profession`); описание —
-    нейтральное «Your journey continues.»;
+  - `VICTORY`/`BOSS_VICTORY` — заголовок `data.encounterName`, при
+    отсутствии — штатный «Unknown boss»/«Неизвестный босс»; описание —
+    фиксированная локализованная строка «The battle ended in victory.»/
+    «Битва завершилась победой.» (восстановление последнего удара для этого
+    типа не применяется);
+  - `PROFESSION_MILESTONE` — `data.kind` выбирает шаблон: `LEARNED` —
+    «Learned profession: {professionName}»/«Изучена профессия: {…}» с
+    описанием «A new profession became part of the journey.»/«Новая
+    профессия стала частью путешествия.»; `MILESTONE` —
+    «{professionName} reached skill {skillLevel}»/«{…}: навык {n}» с
+    описанием «A new profession milestone has been reached.»/«Достигнут
+    новый этап профессии.». Используются только реальные поля профессии
+    (`professionName`, `skillLevel`); `spellName`/`itemName`/`recipeName`
+    для определения изученного не применяются;
     метка типа — «Profession milestone» / «Этап профессии».
   Приоритет: (1) сохранённый текст (`memory.title`/`description`, ручные
   `data.title`/`data.note`); (2) проверенные данные события; (3) нейтральное
@@ -122,13 +134,18 @@ ForeverJourney.lua (байты файла)
 
 ### Паритет двух способов импорта
 
-`src/lib/parity.test.ts` описывает одни и те же события дважды — как
-FJBOOK1-журнал (через референс-экспортёр и настоящий `importJournal()`:
-нарезка частей, Adler-32, Base64, JSON, валидация) и как SavedVariables-фикстуру
-(настоящий `readSavedVariables()` + `buildJournalFromSavedVariables()`). После
-нормализации совпадают: тип, `typeLabel`, `source`, название, описание,
-`personalNote`, избранность, дата, локация и **порядок** событий; для RU и EN
-совпадает и итоговый текст после `localizeMemory()`. Из сравнения исключено
+`src/lib/parity.test.ts` построен на **эталонной таблице выходов Lua-обработчиков**
+(`ADDON_REFERENCE`): для каждого типа события — сырая запись в том виде, в
+котором её пишет аддон (`Memories.lua`, `BossVictoryMilestones.lua`,
+`ProfessionMilestones.lua`, `QuestMilestones.lua`), и точный текст
+`GetDisplayTitle()`/`GetDisplayDescription()` в EN и RU. Таблица составлена по
+спецификации аддона и **не зависит от кода конвертера** — конвертер
+сравнивается именно с ней (по всем типам, экологическим смертям, обеим
+разновидностям профессий, победе над боссом с названием и без), а затем тот же
+эталон прогоняется через настоящий FJBOOK1-конвейер (референс-экспортёр →
+`importJournal()`: нарезка частей, Adler-32, Base64, JSON, валидация): оба
+способа импорта дают идентичные события в идентичном порядке и идентичный
+итоговый текст после `localizeMemory()` для RU и EN. Из сравнения исключено
 (физически отсутствует в SavedVariables и задокументировано): раса, класс и
 уровень персонажа; актуальные `completedQuests`/`totalPlayed` (исторический
 снимок `recoveredHistory` текущим значением не является); конверт экспорта
@@ -159,7 +176,7 @@ FJBOOK1-журнал (через референс-экспортёр и наст
 - **Локализованные клиентом WoW названия** (имена зон/боссов в клиентской
   локали) — в файле только то, что аддон записал на момент события.
 
-## 4. Пройденные тесты (vitest, 243, все зелёные)
+## 4. Пройденные тесты (vitest, 262, все зелёные)
 
 - Парсер: стиль сериализации WoW (CRLF, табы, скобочные ключи), все формы чисел,
   булевы/`nil`, позиционные массивы, дубликаты ключей, комментарии, BOM,
@@ -183,17 +200,24 @@ FJBOOK1-журнал (через референс-экспортёр и наст
   `data.zoneName`→`location.name`; LEVEL `data.level` с описанием
   `MEMORY_DESCRIPTION_LEVEL` («Your journey continues.»); INSTANCE
   `data.instanceName`; DEATH `killerName`/`killerNameRaw` + заклинание только
-  из `data.spellName`, окружение `cause == "ENVIRONMENTAL"` с белым списком
-  известных `environmentalType` (неизвестный тип причины ничего не порождает);
-  QUEST_MILESTONE по счётчику; BOSS_VICTORY заголовок = `data.encounterName`;
-  PROFESSION_MILESTONE `LEARNED`/`MILESTONE` по фактическим данным; сохранённый
-  текст побеждает производный (отдельный тест); без данных или с
-  неподтверждённым шаблоном — нейтральное описание, ничего не выдумывается;
-  RU-локализация производных шаблонов через `localizeMemory` при дословном
+  из `data.spellName` (одиночный `spellID` в имя не превращается), окружение
+  `cause == "ENVIRONMENTAL"` с точными заголовками `ENVIRONMENT_TITLE_KEYS`
+  для всех шести причин, общий «Fell in battle»/«Пал в бою» при отсутствии
+  убийцы и известной причины; QUEST_MILESTONE по счётчику; BOSS_VICTORY
+  заголовок = `data.encounterName` или штатный «Unknown boss»/«Неизвестный
+  босс», фиксированное описание «The battle ended in victory.»; PROFESSION_
+  MILESTONE `data.kind` `LEARNED`/`MILESTONE` с реальными шаблонами обоих
+  языков; сохранённый текст побеждает производный (отдельный тест); без
+  данных или с неподтверждённым шаблоном — нейтральное описание, ничего не
+  выдумывается; RU-локализация через `localizeMemory` при дословном
   сохранении авторских записей.
-- **Паритет импорта**: одинаковые события через реальный FJBOOK1-конвейер
-  (экспортёр → `importJournal`) и SavedVariables-конвейер — совпадение всех
-  полей событий, порядка и итогового RU/EN-текста после локализации;
+- **Эталон обработчиков + паритет импорта**: `ADDON_REFERENCE` в
+  `src/lib/parity.test.ts` — независимая от конвертера таблица выходов
+  Lua-обработчиков (EN+RU) для каждого типа, включая все экологические
+  смерти, обе разновидности профессий и победу над боссом с названием и без;
+  конвертер сравнивается с ней, затем тот же эталон — через реальный
+  FJBOOK1-конвейер (экспортёр → `importJournal`): совпадение всех полей
+  событий, порядка и итогового RU/EN-текста после локализации;
   отсутствующие в SV поля исключены и задокументированы.
 - **recoveredHistory**: полный снимок → `journey.recovered`; `initialized`
   false/отсутствует → снимок отбрасывается (значения по умолчанию не данные);

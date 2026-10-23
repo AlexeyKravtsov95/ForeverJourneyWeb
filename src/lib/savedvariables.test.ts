@@ -147,8 +147,9 @@ describe('journal conversion', () => {
       typeLabel: 'Death',
       description: 'Final blow: Rake.',
     })
-    // DEATH by environment: data.cause == "ENVIRONMENTAL" + a known environmentalType
-    expect(byTitle('Fell in battle — Drowning')).toMatchObject({
+    // DEATH by environment: data.cause == "ENVIRONMENTAL" — the cause has its
+    // own title (ENVIRONMENT_TITLE_KEYS), not "Fell in battle — Drowning"
+    expect(byTitle('Drowned')).toMatchObject({
       description: 'Every journey has its setbacks.',
     })
     // LEVEL: MEMORY_DESCRIPTION_LEVEL is the generic constant
@@ -163,25 +164,26 @@ describe('journal conversion', () => {
     expect(byTitle('Entered The Deadmines')).toMatchObject({
       description: 'Another chapter of your journey lies within.',
     })
-    // BOSS_VICTORY: title is data.encounterName, killing blow is data.spellName
+    // BOSS_VICTORY: title is data.encounterName; the description is fixed —
+    // the killing-blow restoration does not apply to this type
     const boss = journal?.memories.find((m) => m.type === 'BOSS_VICTORY')
     expect(boss).toMatchObject({
       typeLabel: 'Victory',
       title: 'Edwin VanCleef',
-      description: 'Final blow: Pyroblast.',
+      description: 'The battle ended in victory.',
     })
-    // PROFESSION_MILESTONE LEARNED names the thing learned…
+    // PROFESSION_MILESTONE LEARNED names the profession…
     const learned = journal?.memories.filter((m) => m.type === 'PROFESSION_MILESTONE')
     expect(learned).toHaveLength(2)
     expect(learned?.[0]).toMatchObject({
       typeLabel: 'Profession milestone',
-      title: 'Major Mana Potion',
-      description: 'Your journey continues.',
+      title: 'Learned profession: Алхимия',
+      description: 'A new profession became part of the journey.',
     })
-    // …MILESTONE names the profession
+    // …MILESTONE adds the skill level reached
     expect(learned?.[1]).toMatchObject({
-      title: 'Алхимия',
-      description: 'Your journey continues.',
+      title: 'Алхимия reached skill 150',
+      description: 'A new profession milestone has been reached.',
     })
   })
 
@@ -202,10 +204,8 @@ describe('journal conversion', () => {
     expect(journal?.memories[0]).toMatchObject({ title: 'Своё название', description: 'Своё описание' })
   })
 
-  it('derives nothing when the data is missing, unknown or has no confirmed template', () => {
-    // no killer, no environmental cause; an unknown environmentalType; a
-    // non-numeric level; empty zone data; an achievement with no template —
-    // none of these may produce invented text
+  it('every death gets the addon title: exact environmental keys or the generic fallback', () => {
+    // an unknown environmental type is an unknown cause → generic title
     const source = [
       'ForeverJourneyDB = {',
       '\t["schemaVersion"] = 3,',
@@ -213,9 +213,34 @@ describe('journal conversion', () => {
       '\t\t["R:N"] = {',
       '\t\t\t["memories"] = {',
       '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { ["cause"] = "ENVIRONMENTAL", ["environmentalType"] = "QUICKSAND" } },',
+      '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { } },',
+      '\t\t\t\t{ ["type"] = "DEATH", ["data"] = { ["spellID"] = 12345 } },',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
+    expect(journal?.memories).toHaveLength(3)
+    for (const memory of journal?.memories ?? []) {
+      expect(memory.title).toBe('Fell in battle')
+      expect(memory.description).toBe('Every journey has its setbacks.')
+    }
+  })
+
+  it('derives nothing when the data is missing, unknown or has no confirmed template', () => {
+    // an empty zone, a non-numeric level, an unknown profession kind and an
+    // achievement with no template — none of these may produce invented text
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["memories"] = {',
       '\t\t\t\t{ ["type"] = "ZONE", ["data"] = { } },',
       '\t\t\t\t{ ["type"] = "LEVEL", ["data"] = { ["level"] = "many" } },',
-      '\t\t\t\t{ ["type"] = "PROFESSION_MILESTONE", ["data"] = { ["milestoneType"] = "MYSTERY" } },',
+      '\t\t\t\t{ ["type"] = "PROFESSION_MILESTONE", ["data"] = { ["kind"] = "MYSTERY" } },',
+      '\t\t\t\t{ ["type"] = "PROFESSION_MILESTONE", ["data"] = { ["kind"] = "MILESTONE", ["professionName"] = "Fishing", ["skillLevel"] = "high" } },',
       '\t\t\t},',
       '\t\t},',
       '\t},',
@@ -260,10 +285,25 @@ describe('journal conversion', () => {
       title: 'Вход в подземелье: The Deadmines',
       description: 'Впереди новая глава твоего путешествия.',
     })
-    // boss encounter name stays verbatim; the killing blow is translated
+    // environmental death title comes from ENVIRONMENT_TITLE_KEYS, exact RU
+    expect(view('Drowned')).toMatchObject({
+      title: 'Утонул',
+      description: 'На пути каждого героя случаются поражения.',
+    })
+    // boss encounter name stays verbatim; the description is the fixed string
     expect(view('Edwin VanCleef')).toMatchObject({
       typeLabel: 'Победа',
-      description: 'Последний удар: Pyroblast.',
+      title: 'Edwin VanCleef',
+      description: 'Битва завершилась победой.',
+    })
+    // profession templates of both kinds
+    expect(view('Learned profession: Алхимия')).toMatchObject({
+      title: 'Изучена профессия: Алхимия',
+      description: 'Новая профессия стала частью путешествия.',
+    })
+    expect(view('Алхимия reached skill 150')).toMatchObject({
+      title: 'Алхимия: навык 150',
+      description: 'Достигнут новый этап профессии.',
     })
     // authored titles of manual notes and unknown types stay verbatim
     expect(view('Победа в дуэли: Рогнар').title).toBe('Победа в дуэли: Рогнар')

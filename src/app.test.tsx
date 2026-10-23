@@ -276,19 +276,19 @@ describe('SavedVariables import (UI)', () => {
     expect(html).toContain('Открыта зона: Tirisfal Glades')
     expect(html).toContain('Пал в бою — Worgen Packleader')
     expect(html).toContain('Последний удар: Rake.')
-    expect(html).toContain('Пал в бою — Drowning') // environmental death
+    expect(html).toContain('Утонул') // environmental death: ENVIRONMENT_TITLE_KEYS
     expect(html).toContain('Достигнут 6-й уровень')
     expect(html).toContain('Путешествие продолжается.') // MEMORY_DESCRIPTION_LEVEL
     expect(html).toContain('Выполнено заданий: 25')
     expect(html).toContain('Вход в подземелье: The Deadmines')
-    // boss victory: encounter name verbatim, killing blow translated
+    // boss victory: encounter name verbatim, fixed localized description
     expect(html).toContain('Edwin VanCleef')
-    expect(html).toContain('Последний удар: Pyroblast.')
-    // profession milestones of both kinds (label is uppercased by CSS-free
-    // assert: renderToString keeps the raw text)
-    expect(html).toContain('Major Mana Potion')
+    expect(html).toContain('Битва завершилась победой.')
+    expect(html).not.toContain('Последний удар: Pyroblast.')
+    // profession milestones of both kinds
+    expect(html).toContain('Изучена профессия: Алхимия')
+    expect(html).toContain('Алхимия: навык 150')
     expect(html).toContain('Этап профессии')
-    expect(html).toContain('Алхимия')
     // known types get RU labels; the unknown type keeps its own text
     expect(html).toContain('Зона открыта')
     expect(html).toContain('Смерть')

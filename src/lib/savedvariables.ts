@@ -147,17 +147,11 @@ const NEUTRAL_DESCRIPTION = 'Your journey continues.'
 const ENVIRONMENTAL_TYPES = new Set([
   'DROWNING',
   'FALLING',
-  'FALL',
   'FATIGUE',
   'FIRE',
   'LAVA',
   'SLIME',
 ])
-
-function humanizeCode(code: string): string {
-  const words = code.trim().replace(/_+/g, ' ').toLowerCase()
-  return words.charAt(0).toUpperCase() + words.slice(1)
-}
 
 function deriveEventText(
   type: string,
@@ -213,18 +207,30 @@ function deriveEventText(
         : none
     }
     case 'DEATH': {
-      // combat deaths name the killer; environmental deaths (data.cause ==
-      // "ENVIRONMENTAL") name a whitelisted environmentalType instead
-      let enemy = field('killerName') || field('killerNameRaw')
-      if (!enemy && field('cause').toUpperCase() === 'ENVIRONMENTAL') {
-        const kind = field('environmentalType').toUpperCase()
-        if (ENVIRONMENTAL_TYPES.has(kind)) enemy = humanizeCode(kind)
+      // Memories.lua ENVIRONMENT_TITLE_KEYS: each environmental cause has its
+      // own title; without a killer and without a known cause the generic
+      // "Fell in battle" is used. The killing spell is named only when the
+      // file actually carries spellName — a bare spellID cannot be resolved
+      // and is never turned into an invented name.
+      const ENVIRONMENT_TITLE_KEYS: Record<string, string> = {
+        DROWNING: 'Drowned',
+        FALLING: 'Fell from a great height',
+        FATIGUE: 'Succumbed to fatigue',
+        FIRE: 'Burned to death',
+        LAVA: 'Consumed by lava',
+        SLIME: 'Dissolved in slime',
       }
-      if (!enemy) return none
-      // the killing spell lives in data.spellName — the only confirmed field
+      const killer = field('killerName') || field('killerNameRaw')
+      let title = 'Fell in battle'
+      if (killer) {
+        title = `Fell in battle — ${killer}`
+      } else if (field('cause').toUpperCase() === 'ENVIRONMENTAL') {
+        const cause = field('environmentalType').toUpperCase()
+        if (ENVIRONMENTAL_TYPES.has(cause)) title = ENVIRONMENT_TITLE_KEYS[cause]
+      }
       const spell = field('spellName')
       return {
-        title: `Fell in battle — ${enemy}`,
+        title,
         description: spell ? `Final blow: ${spell}.` : 'Every journey has its setbacks.',
       }
     }
@@ -240,24 +246,35 @@ function deriveEventText(
     }
     case 'VICTORY':
     case 'BOSS_VICTORY': {
-      // BossVictoryMilestones.lua titles the entry with data.encounterName;
-      // the killing blow spell is data.spellName
+      // BossVictoryMilestones.lua: title is data.encounterName with the
+      // addon's own "Unknown boss" fallback; the description is a fixed
+      // localized string (no killing-blow restoration for this type)
       const encounter = field('encounterName')
-      const spell = field('spellName')
       return {
-        title: encounter,
-        description: spell ? `Final blow: ${spell}.` : 'The battle ended in victory.',
+        title: encounter || 'Unknown boss',
+        description: 'The battle ended in victory.',
       }
     }
     case 'PROFESSION_MILESTONE': {
-      // ProfessionMilestones.lua stores the kind (LEARNED or MILESTONE);
-      // learned entries name the thing learned, rank entries the profession
-      const kind = (field('milestoneType') || field('kind')).toUpperCase()
-      const profession = field('professionName') || field('profession')
-      const learned = field('spellName') || field('itemName') || field('recipeName')
-      const title =
-        kind === 'LEARNED' ? learned || profession : kind === 'MILESTONE' ? profession : ''
-      return title ? { title, description: NEUTRAL_DESCRIPTION } : none
+      // ProfessionMilestones.lua: data.kind says which template applies —
+      // LEARNED names the profession learned, MILESTONE the profession and
+      // the skill level reached; only these real fields are used
+      const kind = field('kind').toUpperCase()
+      const profession = field('professionName')
+      if (kind === 'LEARNED' && profession) {
+        return {
+          title: `Learned profession: ${profession}`,
+          description: 'A new profession became part of the journey.',
+        }
+      }
+      const skillLevel = count('skillLevel')
+      if (kind === 'MILESTONE' && profession && skillLevel !== undefined) {
+        return {
+          title: `${profession} reached skill ${skillLevel}`,
+          description: 'A new profession milestone has been reached.',
+        }
+      }
+      return none
     }
     default:
       return none
