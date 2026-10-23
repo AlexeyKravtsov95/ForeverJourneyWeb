@@ -25,6 +25,32 @@ describe('database envelope', () => {
     expect(names).toEqual(['Гордунни:Аэлириэн', 'Гордунни:Мрограмар', 'Silvermoon:Thalorien'])
   })
 
+  it('sorts mixed Cyrillic/Latin keys with explicit ru collation regardless of the runtime locale', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["Ясельный:Ярл"] = { },',
+      '\t\t["Auberdine:Alpha"] = { },',
+      '\t\t["Гордунни:Мрограмар"] = { },',
+      '\t\t["Silvermoon:Thalorien"] = { },',
+      '\t\t["Гордунни:Аэлириэн"] = { },',
+      '\t},',
+      '}',
+    ].join('\n')
+    const sv = mustRead(source)
+    // ru collation keeps the whole Cyrillic block before the Latin block, so
+    // this exact order holds on ru-RU and en-US runners alike. With the runtime
+    // default locale the two blocks swap and this expectation fails.
+    expect(sv.characters.map((c) => c.key)).toEqual([
+      'Гордунни:Аэлириэн',
+      'Гордунни:Мрограмар',
+      'Ясельный:Ярл',
+      'Auberdine:Alpha',
+      'Silvermoon:Thalorien',
+    ])
+  })
+
   it('splits realm and name and summarizes memories, favorites and dates', () => {
     const sv = mustRead(fixture(MAIN))
     const aelirien = sv.characters.find((c) => c.key === AELIRIEN)
