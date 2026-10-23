@@ -27,6 +27,7 @@ const PORT = 9335
 const CHROME_PROFILE = resolve(tmpdir(), `fj-chrome-audit-${Date.now()}`)
 
 // fixtures/ is gitignored; every browser script needs a freshly generated set.
+// Read before Chrome is spawned so a missing file cannot orphan the browser.
 function readFixture(name) {
   const path = resolve(ROOT, 'fixtures', name)
   if (!existsSync(path)) {
@@ -39,6 +40,8 @@ function readFixture(name) {
   }
   return readFileSync(path, 'utf8')
 }
+
+const JOURNAL_59 = readFixture('journal-59.txt')
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -186,7 +189,7 @@ await send('Runtime.enable')
 // --- 1. incremental multi-part import -------------------------------------
 console.log('\n=== incremental multi-part import ===')
 await navigate()
-const allBlocks = readFixture('journal-59.txt')
+const allBlocks = JOURNAL_59
   .split(/\r?\n/)
   .filter((line) => line.startsWith('FJBOOK1:'))
 const total = Number(allBlocks[0].split(':')[1].split('/')[1])
@@ -227,7 +230,7 @@ await navigate()
 // force English so the expected error wording is deterministic regardless of
 // the browser locale picked up by detectLang()
 await clickLang('en')
-const goodLines = readFixture('journal-59.txt')
+const goodLines = JOURNAL_59
   .split(/\r?\n/)
   .filter((l) => l.startsWith('FJBOOK1:'))
 // break the declared checksum of every block: the first hex digit is flipped
@@ -277,7 +280,7 @@ check(
 // --- 3. RU/EN switching keeps the journal ---------------------------------
 console.log('\n=== RU/EN switch inside the book ===')
 await navigate()
-const goodCode = readFixture('journal-59.txt')
+const goodCode = JOURNAL_59
 await pasteAndImport(goodCode)
 check((await waitForBook()) === 'ok', 'journal-59 book renders')
 
@@ -325,7 +328,7 @@ for (const viewport of MOBILE_VIEWPORTS) {
   check(landing.textarea, 'import textarea is reachable')
   check(!landing.overflowX, 'no horizontal overflow on the landing')
 
-  await pasteAndImport(readFixture('journal-59.txt'))
+  await pasteAndImport(JOURNAL_59)
   check((await waitForBook()) === 'ok', 'book renders in the mobile viewport')
   const bookView = await evaluate(`(() => ({
     overflowX:
