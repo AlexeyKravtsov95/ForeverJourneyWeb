@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
+import App from './App'
 import Book from './components/Book'
 import Landing from './components/Landing'
 import { buildDemoCode, demoJournal } from './demo/demoJournal'
@@ -84,6 +85,26 @@ describe('demo journal', () => {
       expect(result.journal.memories).toHaveLength(demoJournal.memories.length)
       expect(result.journal.character.name).toBe(demoJournal.character.name)
     }
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('App initial language', () => {
+  it('renders the Russian landing on a first visit with a Russian browser', () => {
+    vi.stubGlobal('navigator', { languages: ['ru-RU', 'en-US'], language: 'ru-RU' })
+    const html = renderToString(<App />)
+    expect(html).toContain('Импортировать журнал')
+  })
+
+  it('renders in English and does not crash when localStorage is unavailable', () => {
+    // simulate a runtime without storage (the node test env has none either)
+    vi.stubGlobal('navigator', { languages: ['en-US'], language: 'en-US' })
+    vi.stubGlobal('localStorage', undefined)
+    const html = renderToString(<App />)
+    expect(html).toContain('Import Journal')
   })
 })
 
