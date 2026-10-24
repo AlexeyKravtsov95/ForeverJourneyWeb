@@ -14,6 +14,22 @@ import { strings } from '../src/i18n'
 import { demoJournal } from '../src/demo/demoJournal'
 import { importJournal, type Journal } from '../src/lib/fjbook'
 import type { JournalMemory } from '../src/lib/journal'
+import { buildJournalFromSavedVariables, readSavedVariables } from '../src/lib/savedvariables'
+
+// FJ-WEB-06: the Character Archive sample — the sanitized Straider SavedVariables
+// fixture rendered through the exact browser pipeline (safe Lua parse → journal
+// with the optional archive block → BookDocument).
+function archiveFixtureJournal(): Journal {
+  const lua = readFileSync(
+    resolve(ROOT, 'fixtures/savedvariables/ForeverJourney-straider.lua'),
+    'utf8'
+  )
+  const sv = readSavedVariables(lua)
+  if (sv.status !== 'ok') throw new Error(`straider fixture did not parse: ${sv.code}`)
+  const journal = buildJournalFromSavedVariables(sv, 'ClassicBetaPvP:Straider')
+  if (!journal) throw new Error('straider journal must build')
+  return journal
+}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = resolve(ROOT, 'docs/pdf-samples')
@@ -217,6 +233,9 @@ const scenarios: Array<{ name: string; journal: Journal; lang: 'en' | 'ru' }> = 
   // rendered in both languages — EN book and its localized RU twin.
   { name: 'client-localization-en', journal: buildStraiderJournal(), lang: 'en' },
   { name: 'client-localization-ru', journal: buildStraiderJournal(), lang: 'ru' },
+  // FJ-WEB-06: Character Archive (SavedVariables import) in both languages
+  { name: 'archive-straider-en', journal: archiveFixtureJournal(), lang: 'en' },
+  { name: 'archive-straider-ru', journal: archiveFixtureJournal(), lang: 'ru' },
 ]
 
 mkdirSync(OUT, { recursive: true })

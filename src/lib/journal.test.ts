@@ -125,4 +125,18 @@ describe('validateJournal', () => {
       code: 'INVALID_SCHEMA',
     })
   })
+
+  it('drops an archive block from an export payload — archives come only from SavedVariables', () => {
+    const result = validateJournal({
+      ...minimal,
+      archive: {
+        recovered: { level: 99, completedQuests: 999, playedTotal: 999_999, capturedAt: 1 },
+        professions: [{ name: 'Горное дело', skillLevel: 300, maxSkillLevel: 300 }],
+        zones: [{ name: 'Азшара', firstSeenAt: 1 }],
+        deathsCounter: 500,
+      },
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.journal.archive).toBeUndefined()
+  })
 })

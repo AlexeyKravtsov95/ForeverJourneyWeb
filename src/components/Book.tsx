@@ -4,6 +4,7 @@ import { buildChapters, type Chapter } from '../lib/chapters'
 import { toRoman } from '../lib/format'
 import { fmt, type Lang, type Strings } from '../i18n'
 import { downloadJournalPdf } from '../pdf/download'
+import ArchiveSection from './ArchiveSection'
 import Cover from './Cover'
 import Introduction from './Introduction'
 import MemoryEntry from './MemoryEntry'
@@ -12,7 +13,7 @@ import { Crest, Divider } from './Ornaments'
 /** Which way the journal got into the app — shown (and localized) in the toolbar. */
 export type ImportSummary =
   | { kind: 'fjbook'; parts: number }
-  | { kind: 'savedvariables'; schema: number; memories: number }
+  | { kind: 'savedvariables'; schema: number; memories: number; archive: boolean }
 
 interface Props {
   tr: Strings
@@ -54,7 +55,8 @@ export default function Book({ tr, lang, onLangChange, journal, meta, onBack }: 
         <span className="toolbar__meta">
           {meta.kind === 'fjbook'
             ? fmt(tr.importedMeta, { parts: meta.parts })
-            : fmt(tr.svImportedMeta, { schema: meta.schema, memories: meta.memories })}
+            : fmt(tr.svImportedMeta, { schema: meta.schema, memories: meta.memories }) +
+              (meta.archive ? ` · ${tr.svArchiveBadge}` : '')}
         </span>
         <div className="toolbar__right">
           <div className="lang-switch" role="group" aria-label="Language">
@@ -105,6 +107,7 @@ export default function Book({ tr, lang, onLangChange, journal, meta, onBack }: 
       <div className="book">
         <Cover journal={journal} tr={tr} lang={lang} />
         <Introduction journal={journal} tr={tr} lang={lang} />
+        <ArchiveSection journal={journal} tr={tr} lang={lang} />
 
         {chapters.length === 0 ? (
           <section className="sheet sheet--chapter">

@@ -302,6 +302,113 @@
   color: #8a6a2f;
 }
 
+/* ---------- character archive ---------- */
+
+.archive__block {
+  margin: 0 0 1.8rem;
+}
+
+.archive__block:last-child {
+  margin-bottom: 0;
+}
+
+.archive__subtitle {
+  margin: 0 0 0.8rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #8a6a2f;
+  text-align: center;
+}
+
+.archive__note {
+  margin: 0.9rem auto 0;
+  max-width: 56ch;
+  border: 1px solid rgba(138, 106, 47, 0.32);
+  border-radius: 4px;
+  background: rgba(201, 164, 92, 0.08);
+  padding: 0.6rem 1rem;
+  font-size: 0.82rem;
+  font-style: italic;
+  line-height: 1.55;
+  text-align: center;
+  color: #7c6647;
+}
+
+.professions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.profession__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+}
+
+.profession__name {
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  color: #4a3418;
+}
+
+.profession__skill {
+  font-size: 0.88rem;
+  color: #6b4a15;
+  white-space: nowrap;
+}
+
+.profession__bar {
+  margin-top: 0.45rem;
+  height: 7px;
+  border: 1px solid rgba(138, 106, 47, 0.45);
+  border-radius: 4px;
+  background: rgba(255, 248, 224, 0.4);
+  overflow: hidden;
+}
+
+.profession__bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(180deg, rgba(201, 164, 92, 0.95), rgba(163, 118, 42, 0.9));
+}
+
+.zones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.45rem 1.6rem;
+}
+
+.zone {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-bottom: 1px dotted rgba(138, 106, 47, 0.35);
+  padding-bottom: 0.3rem;
+}
+
+.zone__name {
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  color: #42301a;
+}
+
+.zone__date {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #7c6647;
+  white-space: nowrap;
+}
+
 .memory {
   position: relative;
   margin: 1.4rem 0 1.8rem;

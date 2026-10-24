@@ -5,6 +5,7 @@
 import { Document, Page, StyleSheet, Text, View } from '@react-pdf/renderer'
 import type { Style } from '@react-pdf/types'
 import type { Journal, JournalMemory } from '../lib/journal'
+import { buildArchiveView, type ArchiveView } from '../lib/archive'
 import { buildChapters } from '../lib/chapters'
 import { formatDate, formatPlayed, toRoman } from '../lib/format'
 import { introLeadText, localizeMemory } from '../lib/localize'
@@ -155,6 +156,63 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+  // ---------- character archive ----------
+  archiveBlock: { marginBottom: 18 },
+  archiveSubtitle: {
+    fontFamily: BOOK_FONT,
+    fontSize: 8,
+    letterSpacing: 2.2,
+    color: '#8a6a2f',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  archiveNote: {
+    fontFamily: BOOK_FONT,
+    fontSize: 8.6,
+    fontStyle: 'italic',
+    color: '#7c6647',
+    textAlign: 'center',
+    lineHeight: 1.5,
+    borderWidth: 0.7,
+    borderColor: 'rgba(138, 106, 47, 0.32)',
+    backgroundColor: 'rgba(201, 164, 92, 0.10)',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    marginHorizontal: 30,
+    marginTop: 10,
+  },
+  profession: { marginBottom: 10 },
+  professionHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  professionName: { fontFamily: BOOK_FONT, fontSize: 11, color: '#4a3418' },
+  professionSkill: { fontFamily: BOOK_FONT, fontSize: 10, color: '#6b4a15' },
+  professionBar: {
+    height: 6,
+    marginTop: 4,
+    borderWidth: 0.7,
+    borderColor: 'rgba(138, 106, 47, 0.45)',
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 248, 224, 0.40)',
+  },
+  professionBarFill: {
+    height: '100%',
+    backgroundColor: 'rgba(176, 138, 66, 0.85)',
+    borderRadius: 2,
+  },
+  zone: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(138, 106, 47, 0.35)',
+    paddingVertical: 4,
+  },
+  zoneName: { fontFamily: BOOK_FONT, fontSize: 10.5, color: '#42301a' },
+  zoneDate: { fontFamily: BOOK_FONT, fontSize: 9, fontStyle: 'italic', color: '#7c6647' },
+
   // ---------- memory entry ----------
   memory: {
     marginBottom: 16,
@@ -291,7 +349,7 @@ const WARMUP_LATIN =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 const WARMUP_CYRILLIC =
   'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя'
-const WARMUP_PUNCT = '—…·№«»?!.,;:()\''
+const WARMUP_PUNCT = '—…·№«»?!.,;:()\'/'
 
 function FontWarmup() {
   const warmupText = WARMUP_LATIN + WARMUP_CYRILLIC + WARMUP_PUNCT
@@ -409,6 +467,88 @@ function Introduction({ journal, tr, lang }: BookDocumentProps) {
           </View>
         ))}
       </View>
+    </Page>
+  )
+}
+
+// The Character Archive page (FJ-WEB-06): the SavedVariables-only section
+// between the introduction and the chapters. Rendered from the same shared
+// view model as the web preview (src/lib/archive.ts), so data and wording can
+// never drift. Sections appear only when the file actually carried them.
+function ArchivePage({ journal, tr, lang }: BookDocumentProps) {
+  const view: ArchiveView | null = buildArchiveView(journal, tr, lang)
+  if (!view) return null
+
+  return (
+    <Page size={A4} style={styles.contentPage}>
+      <View style={styles.pageFrame} fixed />
+      <View style={styles.chapterHead} minPresenceAhead={150}>
+        <Divider width={170} />
+        <Text style={styles.chapterTitle}>{view.title}</Text>
+        <Divider width={170} />
+      </View>
+
+      {view.snapshot ? (
+        <View style={styles.archiveBlock} minPresenceAhead={140}>
+          <Text style={styles.archiveSubtitle}>{view.snapshot.title.toUpperCase()}</Text>
+          <View style={styles.stats}>
+            {view.snapshot.stats.map((stat) => (
+              <View style={styles.stat} key={stat.label}>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel}>{stat.label.toUpperCase()}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.archiveNote}>{view.snapshot.note}</Text>
+        </View>
+      ) : null}
+
+      {view.professions ? (
+        <View style={styles.archiveBlock} minPresenceAhead={80}>
+          <Text style={styles.archiveSubtitle}>{view.professions.title.toUpperCase()}</Text>
+          {view.professions.items.map((profession, index) => (
+            <View style={styles.profession} key={`${profession.name}-${index}`} wrap={false}>
+              <View style={styles.professionHead}>
+                <Text style={styles.professionName}>{profession.name}</Text>
+                {profession.skill ? (
+                  <Text style={styles.professionSkill}>{profession.skill}</Text>
+                ) : null}
+              </View>
+              {profession.progress !== undefined ? (
+                <View style={styles.professionBar}>
+                  <View style={[styles.professionBarFill, { width: `${profession.progress}%` }]} />
+                </View>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {view.zones ? (
+        <View style={styles.archiveBlock} minPresenceAhead={80}>
+          <Text style={styles.archiveSubtitle}>{view.zones.title.toUpperCase()}</Text>
+          {view.zones.items.map((zone, index) => (
+            <View style={styles.zone} key={`${zone.name}-${index}`}>
+              <Text style={styles.zoneName}>{zone.name}</Text>
+              {zone.firstSeen ? <Text style={styles.zoneDate}>{zone.firstSeen}</Text> : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {view.savedStats ? (
+        <View style={styles.archiveBlock} minPresenceAhead={120}>
+          <Text style={styles.archiveSubtitle}>{view.savedStats.title.toUpperCase()}</Text>
+          <View style={styles.stats}>
+            {view.savedStats.stats.map((stat) => (
+              <View style={styles.stat} key={stat.label}>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel}>{stat.label.toUpperCase()}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
     </Page>
   )
 }
@@ -545,6 +685,7 @@ export function BookDocument({ journal, tr, lang }: BookDocumentProps) {
     >
       <Cover journal={journal} tr={tr} lang={lang} />
       <Introduction journal={journal} tr={tr} lang={lang} />
+      <ArchivePage journal={journal} tr={tr} lang={lang} />
       {chapters.length === 0 ? (
         <Page size={A4} style={styles.contentPage}>
           <View style={styles.pageFrame} fixed />

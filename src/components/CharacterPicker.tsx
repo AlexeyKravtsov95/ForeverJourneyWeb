@@ -38,7 +38,14 @@ export default function CharacterPicker({
       setError(tr.svErrors.MEMORIES_TOO_LARGE)
       return
     }
-    onPick(journal, { kind: 'savedvariables', schema: sv.schemaVersion, memories })
+    // whether this character's file actually carried archive data — the book
+    // toolbar tells the reader the source is archival
+    onPick(journal, {
+      kind: 'savedvariables',
+      schema: sv.schemaVersion,
+      memories,
+      archive: journal.archive !== undefined,
+    })
   }
 
   return (
