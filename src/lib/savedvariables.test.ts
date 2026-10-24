@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildJournalFromSavedVariables, readSavedVariables } from './savedvariables'
+import { buildArchiveView } from './archive'
 import { buildChapters } from './chapters'
 import { localizeMemory } from './localize'
+import { strings } from '../i18n'
 
 const fixture = (name: string) =>
   readFileSync(new URL('../../fixtures/savedvariables/' + name, import.meta.url), 'utf8')
@@ -542,14 +544,30 @@ describe('character archive (FJ-WEB-06)', () => {
       { name: 'Кулинария', skillLevel: 25, maxSkillLevel: 75 },
     ])
 
-    // six visited zones with their first-discovery times — deliberately not
-    // equal to the four ZONE events of the chronicle
+    // six visited zones in the real mapID form — deliberately not equal to the
+    // four ZONE events of the chronicle; identifiers never surface as names
     expect(journal.archive?.zones).toHaveLength(6)
-    const dunMorogh = journal.archive?.zones.find((zone) => zone.name === 'Дун Морог')
-    expect(dunMorogh?.firstSeenAt).toBe(Math.floor(Date.UTC(2026, 5, 3, 12) / 1000) * 1000)
-    for (const name of ['Лох Модан', 'Болото Печали', 'Сумеречный лес', 'Тернистая долина', 'Пылающие степи']) {
-      expect(journal.archive?.zones.some((zone) => zone.name === name)).toBe(true)
+    const byName = new Map((journal.archive?.zones ?? []).map((zone) => [zone.name, zone]))
+    expect(byName.get('Калимдор')?.firstSeenAt).toBe(1_791_569_866 * 1000)
+    expect(byName.get('Ясеневый лес')?.firstSeenAt).toBe(1_791_569_869 * 1000)
+    expect(byName.get('Азшара')?.firstSeenAt).toBe(1_791_573_870 * 1000)
+    expect(byName.get('Дуротар')?.firstSeenAt).toBe(1_791_573_890 * 1000)
+    expect(byName.get('Оргриммар')?.firstSeenAt).toBe(1_791_573_891 * 1000)
+    expect(byName.get('Степи')?.firstSeenAt).toBe(1_791_574_879 * 1000)
+    for (const zone of journal.archive?.zones ?? []) {
+      expect(/^\d+$/.test(zone.name)).toBe(false) // a mapID must never leak as a name
     }
+
+    // the shared archive view lists the zones chronologically with their dates
+    const view = buildArchiveView(journal, strings.ru, 'ru')
+    expect(view?.zones?.items.map((zone) => zone.name)).toEqual([
+      'Калимдор',
+      'Ясеневый лес',
+      'Азшара',
+      'Дуротар',
+      'Оргриммар',
+      'Степи',
+    ])
   })
 
   it('questIDs never become memories and currentLevel never becomes a level', () => {
@@ -626,8 +644,34 @@ describe('character archive (FJ-WEB-06)', () => {
     ])
   })
 
-  it('visitedZones: map form, record form and undated entries', () => {
-    const mapForm = [
+  it('visitedZones: confirmed mapID form plus the legacy map and undated entries', () => {
+    // the real addon shape: numeric mapID keys → { name, firstSeenAt }
+    const mapIdForm = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["visitedZones"] = {',
+      '\t\t\t\t[1447] = { ["name"] = "Азшара", ["firstSeenAt"] = 1791573870 },',
+      '\t\t\t\t[9999] = { ["firstSeenAt"] = 1791573870 },',
+      '\t\t\t\t[1411] = { ["name"] = "Дуротар" },',
+      '\t\t\t\t[1234] = 1791573870,',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const mapId = buildJournalFromSavedVariables(mustRead(mapIdForm), 'R:N')
+    // model order follows the file's table keys (numeric keys ascend); the
+    // display order is the view's chronological sort, asserted separately
+    const byName = new Map((mapId?.archive?.zones ?? []).map((zone) => [zone.name, zone]))
+    expect([...byName.keys()].sort()).toEqual(['Азшара', 'Дуротар'])
+    expect(byName.get('Азшара')).toEqual({ name: 'Азшара', firstSeenAt: 1_791_573_870 * 1000 })
+    expect(byName.get('Дуротар')).toEqual({ name: 'Дуротар' }) // no time → undated
+
+    // legacy shapes keep working: zone-name map with a bare time or a table,
+    // and record entries with zone/firstSeen/timestamp field names
+    const legacyMap = [
       'ForeverJourneyDB = {',
       '\t["schemaVersion"] = 3,',
       '\t["characters"] = {',
@@ -637,37 +681,24 @@ describe('character archive (FJ-WEB-06)', () => {
       '\t\t\t\t["Лох Модан"] = { ["firstSeen"] = 1781006400 },',
       '\t\t\t\t["Тернистая долина"] = "не дата",',
       '\t\t\t\t[""] = 1780401600,',
+      '\t\t\t\t{ ["zone"] = "Танарис", ["timestamp"] = 1781400000 },',
       '\t\t\t},',
       '\t\t},',
       '\t},',
       '}',
     ].join('\n')
-    const map = buildJournalFromSavedVariables(mustRead(mapForm), 'R:N')
-    expect(map?.archive?.zones).toEqual([
-      { name: 'Дун Морог', firstSeenAt: 1_780_401_600 * 1000 },
-      { name: 'Лох Модан', firstSeenAt: 1_781_006_400 * 1000 },
-      { name: 'Тернистая долина' }, // zone kept, invalid time left undated
+    const legacy = buildJournalFromSavedVariables(mustRead(legacyMap), 'R:N')
+    const legacyByName = new Map((legacy?.archive?.zones ?? []).map((zone) => [zone.name, zone]))
+    expect([...legacyByName.keys()].sort()).toEqual([
+      'Дун Морог',
+      'Лох Модан',
+      'Танарис',
+      'Тернистая долина',
     ])
-
-    const recordForm = [
-      'ForeverJourneyDB = {',
-      '\t["schemaVersion"] = 3,',
-      '\t["characters"] = {',
-      '\t\t["R:N"] = {',
-      '\t\t\t["visitedZones"] = {',
-      '\t\t\t\t{ ["name"] = "Дун Морог", ["firstSeen"] = 1780401600 },',
-      '\t\t\t\t{ ["zone"] = "Лох Модан" },',
-      '\t\t\t\t{ ["skillLevel"] = 94 },',
-      '\t\t\t},',
-      '\t\t},',
-      '\t},',
-      '}',
-    ].join('\n')
-    const records = buildJournalFromSavedVariables(mustRead(recordForm), 'R:N')
-    expect(records?.archive?.zones).toEqual([
-      { name: 'Дун Морог', firstSeenAt: 1_780_401_600 * 1000 },
-      { name: 'Лох Модан' }, // no saved time → undated, but still listed
-    ])
+    expect(legacyByName.get('Дун Морог')).toEqual({ name: 'Дун Морог', firstSeenAt: 1_780_401_600 * 1000 })
+    expect(legacyByName.get('Лох Модан')).toEqual({ name: 'Лох Модан', firstSeenAt: 1_781_006_400 * 1000 })
+    expect(legacyByName.get('Тернистая долина')).toEqual({ name: 'Тернистая долина' }) // invalid time
+    expect(legacyByName.get('Танарис')).toEqual({ name: 'Танарис', firstSeenAt: 1_781_400_000 * 1000 })
   })
 
   it('empty professions and visitedZones leave the archive without those blocks', () => {

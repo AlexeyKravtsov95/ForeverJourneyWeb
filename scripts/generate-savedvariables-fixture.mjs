@@ -18,7 +18,9 @@ function lua(value, indent = '\t') {
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   const inner = indent + '\t'
   const fields = Object.entries(value).map(([key, val]) => {
-    return `${inner}[${luaString(key)}] = ${lua(val, inner)}`
+    // WoW writes numeric table keys unquoted ([1447] = { … }), strings quoted
+    const keyLua = /^\d+$/.test(key) ? key : luaString(key)
+    return `${inner}[${keyLua}] = ${lua(val, inner)}`
   })
   if (fields.length === 0) return '{ }'
   return `{\n${fields.join(',\n')},\n${indent}}`
@@ -348,14 +350,16 @@ const straiderMemories = [
   }),
 ]
 
-// six visited zones — deliberately not equal to the four ZONE events above
+// six visited zones in the real addon shape — numeric mapID keys →
+// { name, firstSeenAt } — deliberately not equal to the four ZONE events
+// above; the identifiers must never surface as zone names
 const straiderVisitedZones = {
-  'Дун Морог': june(3),
-  'Лох Модан': june(10),
-  'Болото Печали': june(17),
-  'Сумеречный лес': later(6, 2),
-  'Тернистая долина': later(6, 20),
-  'Пылающие степи': later(7, 3),
+  1447: { name: 'Азшара', firstSeenAt: 1_791_573_870 },
+  1413: { name: 'Степи', firstSeenAt: 1_791_574_879 },
+  1440: { name: 'Ясеневый лес', firstSeenAt: 1_791_569_869 },
+  1414: { name: 'Калимдор', firstSeenAt: 1_791_569_866 },
+  1411: { name: 'Дуротар', firstSeenAt: 1_791_573_890 },
+  1454: { name: 'Оргриммар', firstSeenAt: 1_791_573_891 },
 }
 
 const straiderDb = {

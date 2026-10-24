@@ -395,11 +395,19 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     expect(html).toContain('91 / 150')
     expect(html).toContain('Кулинария')
     expect(html).toContain('25 / 75')
-    // six visited zones, chronologically first-last in the list
+    // six visited zones from the real mapID form, chronological in the list;
+    // the numeric identifiers must never surface as zone names
     expect(html).toContain('Посещённые локации')
-    expect(html).toContain('Дун Морог')
-    expect(html).toContain('Пылающие степи')
     expect((html.match(/zone__name/g) ?? []).length).toBe(6)
+    const zoneOrder = ['Калимдор', 'Ясеневый лес', 'Азшара', 'Дуротар', 'Оргриммар', 'Степи']
+    for (const name of zoneOrder) expect(html).toContain(name)
+    for (let index = 1; index < zoneOrder.length; index++) {
+      expect(html.indexOf(zoneOrder[index - 1])).toBeLessThan(html.indexOf(zoneOrder[index]))
+    }
+    expect(html).not.toContain('1447')
+    expect(html).not.toContain('1440')
+    expect(html).not.toContain('1411')
+    expect(html).not.toContain('1454')
     // saved statistics: the addon counter 24, not the 3 chronicle DEATH events
     expect(html).toContain('Сохранённая статистика')
     expect(html).toContain('Смертей (сохранённый счётчик)')

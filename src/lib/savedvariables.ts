@@ -600,38 +600,55 @@ function parseArchivedProfessions(value: LuaValue | undefined): ArchivedProfessi
 
 /**
  * `character.visitedZones` — zones the addon saw the character enter, with the
- * time of the first discovery. Two shapes are honored: the map form
- * (`["Zone"] = <unix seconds>` — the value may also be a table carrying the
- * time) and the record form (`{ name = "Zone", firstSeen = <unix seconds> }`).
- * A zone without a name is dropped; a missing or invalid time leaves the visit
- * undated. This is the addon's own zone tracking and is never mixed with the
- * ZONE events of the chronicle.
+ * time of the first discovery. The confirmed shape of the real SavedVariables
+ * file is a map keyed by the numeric mapID: `[1447] = { ["name"] = "Азшара",
+ * ["firstSeenAt"] = 1791573870 }` — the numeric key is an identifier and is
+ * never shown as a name; the name comes only from `record.name`. For
+ * resilience the two earlier accepted shapes stay: a map keyed by the zone
+ * name (`["Zone"] = <unix seconds>`, the value may be a table carrying the
+ * time) and record arrays (`{ name|zone, firstSeenAt|firstSeen|timestamp }`).
+ * A visit without a saved name is dropped (nothing is invented); an invalid
+ * or missing time leaves the visit undated. This is the addon's own zone
+ * tracking and is never mixed with the ZONE events of the chronicle.
  */
 const MAX_ARCHIVED_ZONES = 5_000
+
+/** First-visit time of a record: the confirmed field first, then the fallbacks. */
+function recordFirstSeen(record: LuaTable): LuaValue | undefined {
+  return record.firstSeenAt ?? record.firstSeen ?? record.timestamp
+}
+
+const NUMERIC_KEY = /^\d+$/
 
 function parseVisitedZones(value: LuaValue | undefined): ArchivedZoneVisit[] {
   if (typeof value !== 'object' || value === null) return []
   const zones: ArchivedZoneVisit[] = []
   const add = (name: string, when: LuaValue | undefined) => {
     const trimmed = name.trim()
-    if (!trimmed) return
+    // no name → nothing honest to show; a bare numeric key is a mapID, not a name
+    if (!trimmed || NUMERIC_KEY.test(trimmed)) return
     let firstSeenAt = toTimestamp(when)
     if (firstSeenAt === undefined && typeof when === 'object' && when !== null) {
-      firstSeenAt = toTimestamp(when.firstSeen) ?? toTimestamp(when.timestamp)
+      firstSeenAt = toTimestamp(recordFirstSeen(when))
     }
     zones.push({
       name: trimmed.slice(0, MAX_STRING_LENGTH),
       ...(firstSeenAt !== undefined ? { firstSeenAt } : {}),
     })
   }
-  const arrayForm = luaToArray(value)
-  if (arrayForm.length > 0) {
-    for (const item of arrayForm) {
-      if (typeof item !== 'object' || item === null) continue
-      add(asText(item.name).trim() || asText(item.zone).trim(), item.firstSeen ?? item.timestamp)
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === 'object' && entry !== null) {
+      // a record: the name comes from the record itself (the numeric key may
+      // be a mapID); without a record name a non-numeric key still carries the
+      // legacy "zone name → table with the time" map shape
+      const name = asText(entry.name).trim() || asText(entry.zone).trim()
+      if (name) add(name, recordFirstSeen(entry))
+      else if (!NUMERIC_KEY.test(key)) add(key, entry)
+      continue
     }
-  } else {
-    for (const [name, when] of Object.entries(value)) add(name, when)
+    // numeric key with a bare value carries no zone name — identifier is not shown
+    if (NUMERIC_KEY.test(key)) continue
+    add(key, entry)
   }
   return zones.slice(0, MAX_ARCHIVED_ZONES)
 }
