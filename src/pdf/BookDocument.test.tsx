@@ -111,4 +111,31 @@ describe('BookDocument', () => {
     },
     120_000
   )
+
+  // FJ-WEB-06: the Character Archive page sits between the introduction and
+  // the chapters; the same shared view model feeds the web preview
+  it.each(['en', 'ru'] as const)(
+    'renders the Straider Character Archive page (%s)',
+    async (lang) => {
+      const { buildJournalFromSavedVariables, readSavedVariables } = await import(
+        '../lib/savedvariables'
+      )
+      const lua = readFileSync(
+        new URL('../../fixtures/savedvariables/ForeverJourney-straider.lua', import.meta.url),
+        'utf8'
+      )
+      const sv = readSavedVariables(lua)
+      if (sv.status !== 'ok') throw new Error('fixture must parse')
+      const journal = buildJournalFromSavedVariables(sv, 'ClassicBetaPvP:Straider')
+      if (!journal) throw new Error('journal must build')
+      expect(journal.archive).toBeDefined()
+      const buffer = await renderToBuffer(
+        <BookDocument journal={journal} tr={strings[lang]} lang={lang} />
+      )
+      expect(isPdf(buffer)).toBe(true)
+      // cover + intro + archive + one chapter + end page make a multi-page book
+      expect(buffer.length).toBeGreaterThan(30_000)
+    },
+    120_000
+  )
 })

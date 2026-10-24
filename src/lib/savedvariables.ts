@@ -20,6 +20,9 @@ import {
   MAX_MEMORIES,
   MAX_STRING_LENGTH,
   toTimestamp,
+  type ArchivedProfession,
+  type ArchivedZoneVisit,
+  type CharacterArchive,
   type Journal,
   type JournalMemory,
   type RecoveredHistory,
@@ -455,6 +458,7 @@ export function buildJournalFromSavedVariables(
     ordered.filter((memory) => memory.type.trim().toUpperCase() === 'DEATH').length
 
   const startedAt = toTimestamp(record.createdAt)
+  const archive = buildCharacterArchive(record, declaredDeaths)
 
   return {
     format: 'FJJOURNAL',
@@ -465,9 +469,35 @@ export function buildJournalFromSavedVariables(
     journey: {
       ...(startedAt !== undefined ? { startedAt } : {}),
       ...(deaths > 0 || declaredDeaths !== undefined ? { deaths } : {}),
-      ...parseRecoveredHistory(record.recoveredHistory),
     },
+    ...(archive !== undefined ? { archive } : {}),
     memories: ordered,
+  }
+}
+
+/**
+ * Assembles the optional Character Archive block: the historical snapshot
+ * (`recoveredHistory`, trusted only when initialized), its professions, the
+ * visited zones, and the saved death counter — each field validated by its
+ * own rule, each unknown left out instead of guessed. Returns undefined when
+ * the file carries no archive data at all.
+ */
+function buildCharacterArchive(record: LuaTable, declaredDeaths: number | undefined): CharacterArchive | undefined {
+  const { recovered, professions } = parseRecoveredHistory(record.recoveredHistory)
+  const zones = parseVisitedZones(record.visitedZones)
+  if (
+    recovered === undefined &&
+    professions.length === 0 &&
+    zones.length === 0 &&
+    declaredDeaths === undefined
+  ) {
+    return undefined
+  }
+  return {
+    ...(recovered !== undefined ? { recovered } : {}),
+    professions,
+    zones,
+    ...(declaredDeaths !== undefined ? { deathsCounter: declaredDeaths } : {}),
   }
 }
 
@@ -502,12 +532,31 @@ function asLevel(value: LuaValue | undefined): number | undefined {
   return value
 }
 
-function parseRecoveredHistory(value: LuaValue): { recovered?: RecoveredHistory } {
+/** Profession skill values: non-negative integers with a generous cap. */
+function asSkillLevel(value: LuaValue | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined
+  return Math.min(Math.floor(value), 100_000)
+}
+
+/**
+ * A skill maximum of 0 is the addon's unset default, not a real cap — only a
+ * positive maximum is kept.
+ */
+function asMaxSkillLevel(value: LuaValue | undefined): number | undefined {
+  const skill = asSkillLevel(value)
+  return skill !== undefined && skill > 0 ? skill : undefined
+}
+
+function parseRecoveredHistory(
+  value: LuaValue
+): { recovered?: RecoveredHistory; professions: ArchivedProfession[] } {
   const table = asTable(value)
   // a snapshot that was never initialized carries default values, not data
-  if (!table || table.initialized !== true) return {}
+  if (!table || table.initialized !== true) return { professions: [] }
   const capturedAt = toTimestamp(table.capturedAt)
   const completedQuests = asQuestCount(asTable(table.completedQuests)?.count)
+  // played.total is the total play time; played.currentLevel is play time at
+  // the current level and must never be read as the character level
   const playedTotal = asPlayedSeconds(asTable(table.played)?.total)
   const level = asLevel(table.level)
   const known: RecoveredHistory = {
@@ -516,5 +565,73 @@ function parseRecoveredHistory(value: LuaValue): { recovered?: RecoveredHistory 
     ...(playedTotal !== undefined ? { playedTotal } : {}),
     ...(level !== undefined ? { level } : {}),
   }
-  return Object.keys(known).length > 0 ? { recovered: known } : {}
+  return {
+    ...(Object.keys(known).length > 0 ? { recovered: known } : {}),
+    professions: parseArchivedProfessions(table.professions),
+  }
+}
+
+/**
+ * `recoveredHistory.professions` — the professions captured in the snapshot.
+ * A record survives only with a saved name; skill numbers are kept only when
+ * they are valid (an unknown skill is not turned into 0). The name is stored
+ * exactly as the client saved it, never translated or normalized.
+ */
+const MAX_ARCHIVED_PROFESSIONS = 100
+
+function parseArchivedProfessions(value: LuaValue | undefined): ArchivedProfession[] {
+  if (typeof value !== 'object' || value === null) return []
+  const professions: ArchivedProfession[] = []
+  for (const item of luaToArray(value)) {
+    if (typeof item !== 'object' || item === null) continue
+    const name = asText(item.name).trim() || asText(item.professionName).trim()
+    if (!name) continue // no saved name — nothing honest to show
+    const skillLevel = asSkillLevel(item.skillLevel)
+    const maxSkillLevel = asMaxSkillLevel(item.maxSkillLevel)
+    professions.push({
+      name,
+      ...(skillLevel !== undefined ? { skillLevel } : {}),
+      ...(maxSkillLevel !== undefined ? { maxSkillLevel } : {}),
+    })
+    if (professions.length >= MAX_ARCHIVED_PROFESSIONS) break
+  }
+  return professions
+}
+
+/**
+ * `character.visitedZones` — zones the addon saw the character enter, with the
+ * time of the first discovery. Two shapes are honored: the map form
+ * (`["Zone"] = <unix seconds>` — the value may also be a table carrying the
+ * time) and the record form (`{ name = "Zone", firstSeen = <unix seconds> }`).
+ * A zone without a name is dropped; a missing or invalid time leaves the visit
+ * undated. This is the addon's own zone tracking and is never mixed with the
+ * ZONE events of the chronicle.
+ */
+const MAX_ARCHIVED_ZONES = 5_000
+
+function parseVisitedZones(value: LuaValue | undefined): ArchivedZoneVisit[] {
+  if (typeof value !== 'object' || value === null) return []
+  const zones: ArchivedZoneVisit[] = []
+  const add = (name: string, when: LuaValue | undefined) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    let firstSeenAt = toTimestamp(when)
+    if (firstSeenAt === undefined && typeof when === 'object' && when !== null) {
+      firstSeenAt = toTimestamp(when.firstSeen) ?? toTimestamp(when.timestamp)
+    }
+    zones.push({
+      name: trimmed.slice(0, MAX_STRING_LENGTH),
+      ...(firstSeenAt !== undefined ? { firstSeenAt } : {}),
+    })
+  }
+  const arrayForm = luaToArray(value)
+  if (arrayForm.length > 0) {
+    for (const item of arrayForm) {
+      if (typeof item !== 'object' || item === null) continue
+      add(asText(item.name).trim() || asText(item.zone).trim(), item.firstSeen ?? item.timestamp)
+    }
+  } else {
+    for (const [name, when] of Object.entries(value)) add(name, when)
+  }
+  return zones.slice(0, MAX_ARCHIVED_ZONES)
 }
