@@ -294,57 +294,60 @@ const brokenLua = [
 // describes (7 memories, 24 saved deaths vs 3 DEATH events, 6 visited zones
 // vs 4 ZONE events, snapshot level 25 / 182 quests / 183754 s played, three
 // professions). A second synthetic character proves archives never merge.
+// FJ-WEB-06.1: the beta character was played in a single session, so every
+// Straider timestamp is a different time inside one calendar day (2026-10-10
+// UTC) — the cover must show one date, not a same-day range.
 // ---------------------------------------------------------------------------
-const june = (day, hour = 12) => Math.floor(Date.UTC(2026, 5, day, hour) / 1000)
-const later = (month, day) => Math.floor(Date.UTC(2026, month, day) / 1000)
+const day = (hour, minute = 0) => Math.floor(Date.UTC(2026, 9, 10, hour, minute) / 1000)
+const later = (month, dayOfMonth) => Math.floor(Date.UTC(2026, month, dayOfMonth) / 1000)
 
 const straiderMemories = [
   memory({
     type: 'ZONE',
     source: 'RECORDED',
-    timestamp: june(3),
+    timestamp: day(6, 20),
     location: 'Дун Морог',
     data: { zoneName: 'Dun Morogh' },
   }),
   memory({
     type: 'ZONE',
     source: 'RECORDED',
-    timestamp: june(10),
+    timestamp: day(7, 45),
     location: 'Лох Модан',
     data: { zoneName: 'Loch Modan' },
   }),
   memory({
     type: 'DEATH',
     source: 'RECORDED',
-    timestamp: june(12),
+    timestamp: day(8, 30),
     location: 'Лох Модан',
     data: { cause: 'ENVIRONMENTAL', environmentalType: 'FALLING' },
   }),
   memory({
     type: 'ZONE',
     source: 'RECORDED',
-    timestamp: june(18),
+    timestamp: day(9, 35),
     location: 'Болото Печали',
     data: { zoneName: 'Wetlands' },
   }),
   memory({
     type: 'DEATH',
     source: 'RECORDED',
-    timestamp: june(25),
+    timestamp: day(10, 50),
     location: 'Болото Печали',
     data: { killerName: 'Blackrock Ogre', killerNameRaw: 'Blackrock Ogre', spellName: 'Ogre Smash' },
   }),
   memory({
     type: 'ZONE',
     source: 'RECORDED',
-    timestamp: later(6, 2),
+    timestamp: day(12, 5),
     location: 'Сумеречный лес',
     data: { zoneName: 'Duskwood' },
   }),
   memory({
     type: 'DEATH',
     source: 'RECORDED',
-    timestamp: later(6, 9),
+    timestamp: day(13, 40),
     location: 'Сумеречный лес',
     data: {},
   }),
@@ -352,14 +355,16 @@ const straiderMemories = [
 
 // six visited zones in the real addon shape — numeric mapID keys →
 // { name, firstSeenAt } — deliberately not equal to the four ZONE events
-// above; the identifiers must never surface as zone names
+// above; the identifiers must never surface as zone names. Discovery offsets
+// inside the same play day are kept, so chronological order is unchanged.
+const zoneSeen = (offsetSeconds) => day(6) + offsetSeconds
 const straiderVisitedZones = {
-  1447: { name: 'Азшара', firstSeenAt: 1_791_573_870 },
-  1413: { name: 'Степи', firstSeenAt: 1_791_574_879 },
-  1440: { name: 'Ясеневый лес', firstSeenAt: 1_791_569_869 },
-  1414: { name: 'Калимдор', firstSeenAt: 1_791_569_866 },
-  1411: { name: 'Дуротар', firstSeenAt: 1_791_573_890 },
-  1454: { name: 'Оргриммар', firstSeenAt: 1_791_573_891 },
+  1447: { name: 'Азшара', firstSeenAt: zoneSeen(4004) },
+  1413: { name: 'Степи', firstSeenAt: zoneSeen(5013) },
+  1440: { name: 'Ясеневый лес', firstSeenAt: zoneSeen(3) },
+  1414: { name: 'Калимдор', firstSeenAt: zoneSeen(0) },
+  1411: { name: 'Дуротар', firstSeenAt: zoneSeen(4024) },
+  1454: { name: 'Оргриммар', firstSeenAt: zoneSeen(4025) },
 }
 
 const straiderDb = {
@@ -367,11 +372,11 @@ const straiderDb = {
   addonVersion: '0.9.8',
   characters: {
     'ClassicBetaPvP:Straider': {
-      createdAt: june(2),
+      createdAt: day(5, 30),
       stats: { deaths: 24 },
       recoveredHistory: {
         initialized: true,
-        capturedAt: june(5),
+        capturedAt: day(5, 35),
         level: 25,
         completedQuests: {
           count: 182,

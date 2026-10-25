@@ -7,7 +7,7 @@ import type { Style } from '@react-pdf/types'
 import type { Journal, JournalMemory } from '../lib/journal'
 import { buildArchiveView, type ArchiveView } from '../lib/archive'
 import { buildChapters } from '../lib/chapters'
-import { formatDate, formatPlayed, toRoman } from '../lib/format'
+import { formatDate, formatPlayed, toRoman, coverDateRange } from '../lib/format'
 import { introLeadText, localizeMemory } from '../lib/localize'
 import { fmt, type Lang, type Strings } from '../i18n'
 import { BOOK_FONT } from './registerFonts'
@@ -180,6 +180,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginHorizontal: 30,
     marginTop: 10,
+  },
+  archiveCounterNote: {
+    fontFamily: BOOK_FONT,
+    fontSize: 8,
+    fontStyle: 'italic',
+    color: '#8a7a5c',
+    textAlign: 'center',
+    lineHeight: 1.5,
+    marginHorizontal: 26,
+    marginTop: 6,
   },
   profession: { marginBottom: 10 },
   professionHead: {
@@ -364,25 +374,13 @@ function FontWarmup() {
 }
 
 function Cover({ journal, tr, lang }: BookDocumentProps) {
-  const { character, journey } = journal
-  const times = journal.memories
-    .map((memory) => memory.timestamp)
-    .filter((value): value is number => typeof value === 'number')
-  const firstMemory = times.length ? Math.min(...times) : undefined
-  const lastMemory = times.length ? Math.max(...times) : undefined
-  const start = journey.startedAt ?? firstMemory
-  const end = lastMemory ?? journal.exportedAt
+  const { character } = journal
 
   const metaParts = [character.race, character.class]
   if (character.level > 0) metaParts.push(fmt(tr.levelN, { level: character.level }))
   const meta = metaParts.filter(Boolean).join(' · ').toUpperCase()
 
-  let dates = ''
-  if (start && end && start !== end) {
-    dates = `${formatDate(start, lang)} — ${formatDate(end, lang)}`
-  } else if (start ?? end) {
-    dates = formatDate((start ?? end) as number, lang)
-  }
+  const dates = coverDateRange(journal, lang)
 
   return (
     <Page size={A4} style={styles.coverPage}>
@@ -536,18 +534,10 @@ function ArchivePage({ journal, tr, lang }: BookDocumentProps) {
         </View>
       ) : null}
 
-      {view.savedStats ? (
-        <View style={styles.archiveBlock} minPresenceAhead={120}>
-          <Text style={styles.archiveSubtitle}>{view.savedStats.title.toUpperCase()}</Text>
-          <View style={styles.stats}>
-            {view.savedStats.stats.map((stat) => (
-              <View style={styles.stat} key={stat.label}>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label.toUpperCase()}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
+      {view.counterNote ? (
+        <Text style={styles.archiveCounterNote} minPresenceAhead={60}>
+          {view.counterNote}
+        </Text>
       ) : null}
     </Page>
   )

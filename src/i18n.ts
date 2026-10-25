@@ -80,9 +80,8 @@ export interface Strings {
   archiveSnapshotDate: string
   archiveProfessionsTitle: string
   archiveZonesTitle: string
-  archiveSavedStatsTitle: string
-  archiveStatDeathsSaved: string
-  archiveStatMemories: string
+  /** Provenance of the death counter the introduction shows (saved, not counted). */
+  archiveDeathsSourceNote: string
   importFjbookHint: string
   svArchiveBadge: string
 }
@@ -200,9 +199,8 @@ export const strings: Record<Lang, Strings> = {
     archiveSnapshotDate: 'Snapshot date',
     archiveProfessionsTitle: 'Professions',
     archiveZonesTitle: 'Explored Locations',
-    archiveSavedStatsTitle: 'Saved Statistics',
-    archiveStatDeathsSaved: 'Deaths (saved counter)',
-    archiveStatMemories: 'Memories',
+    archiveDeathsSourceNote:
+      'The death total in the introduction is the addon\u2019s saved counter — the chronicle keeps only some deaths as memories.',
     svArchiveBadge: 'Character Archive',
   },
   ru: {
@@ -314,9 +312,8 @@ export const strings: Record<Lang, Strings> = {
     archiveSnapshotDate: 'Дата снимка',
     archiveProfessionsTitle: 'Профессии',
     archiveZonesTitle: 'Посещённые локации',
-    archiveSavedStatsTitle: 'Сохранённая статистика',
-    archiveStatDeathsSaved: 'Смертей (сохранённый счётчик)',
-    archiveStatMemories: 'Воспоминаний',
+    archiveDeathsSourceNote:
+      'Общее число смертей во вступлении — сохранённый счётчик аддона: летопись сохраняет лишь часть смертей как воспоминания.',
     svArchiveBadge: 'Архив персонажа',
   },
 }

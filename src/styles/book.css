@@ -291,6 +291,9 @@
   display: block;
   font-size: 1.25rem;
   color: #6b4a15;
+  /* dates and play time must not wrap mid-value (an orphaned «г.» on its own
+     line breaks the tile); every value the book renders fits one line */
+  white-space: nowrap;
 }
 
 .stat__label {
@@ -333,6 +336,17 @@
   line-height: 1.55;
   text-align: center;
   color: #7c6647;
+}
+
+/* one-line provenance note for the introduction's death counter */
+.archive__counter-note {
+  margin: 1.4rem auto 0;
+  max-width: 64ch;
+  font-size: 0.78rem;
+  font-style: italic;
+  line-height: 1.5;
+  text-align: center;
+  color: #8a7a5c;
 }
 
 .professions {

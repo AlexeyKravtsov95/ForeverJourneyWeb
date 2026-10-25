@@ -530,7 +530,7 @@ describe('character archive (FJ-WEB-06)', () => {
     // snapshot values exactly as archived; currentLevel (43210 s at level) is
     // play time at the current level and never becomes the character level
     expect(journal.archive?.recovered).toEqual({
-      capturedAt: Math.floor(Date.UTC(2026, 5, 5, 12) / 1000) * 1000,
+      capturedAt: Math.floor(Date.UTC(2026, 9, 10, 5, 35) / 1000) * 1000,
       completedQuests: 182,
       playedTotal: 183_754,
       level: 25,
@@ -548,12 +548,12 @@ describe('character archive (FJ-WEB-06)', () => {
     // four ZONE events of the chronicle; identifiers never surface as names
     expect(journal.archive?.zones).toHaveLength(6)
     const byName = new Map((journal.archive?.zones ?? []).map((zone) => [zone.name, zone]))
-    expect(byName.get('Калимдор')?.firstSeenAt).toBe(1_791_569_866 * 1000)
-    expect(byName.get('Ясеневый лес')?.firstSeenAt).toBe(1_791_569_869 * 1000)
-    expect(byName.get('Азшара')?.firstSeenAt).toBe(1_791_573_870 * 1000)
-    expect(byName.get('Дуротар')?.firstSeenAt).toBe(1_791_573_890 * 1000)
-    expect(byName.get('Оргриммар')?.firstSeenAt).toBe(1_791_573_891 * 1000)
-    expect(byName.get('Степи')?.firstSeenAt).toBe(1_791_574_879 * 1000)
+    expect(byName.get('Калимдор')?.firstSeenAt).toBe(1_791_612_000 * 1000)
+    expect(byName.get('Ясеневый лес')?.firstSeenAt).toBe(1_791_612_003 * 1000)
+    expect(byName.get('Азшара')?.firstSeenAt).toBe(1_791_616_004 * 1000)
+    expect(byName.get('Дуротар')?.firstSeenAt).toBe(1_791_616_024 * 1000)
+    expect(byName.get('Оргриммар')?.firstSeenAt).toBe(1_791_616_025 * 1000)
+    expect(byName.get('Степи')?.firstSeenAt).toBe(1_791_617_013 * 1000)
     for (const zone of journal.archive?.zones ?? []) {
       expect(/^\d+$/.test(zone.name)).toBe(false) // a mapID must never leak as a name
     }

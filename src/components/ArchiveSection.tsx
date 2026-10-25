@@ -87,19 +87,7 @@ export default function ArchiveSection({ journal, tr, lang }: Props) {
         </section>
       )}
 
-      {view.savedStats && (
-        <section className="archive__block" aria-label={view.savedStats.title}>
-          <h3 className="archive__subtitle">{view.savedStats.title}</h3>
-          <div className="stats">
-            {view.savedStats.stats.map((stat) => (
-              <div className="stat" key={stat.label}>
-                <span className="stat__value">{stat.value}</span>
-                <span className="stat__label">{stat.label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {view.counterNote && <p className="archive__counter-note">{view.counterNote}</p>}
     </section>
   )
 }

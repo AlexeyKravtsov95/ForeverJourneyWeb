@@ -45,7 +45,7 @@ describe('buildArchiveView', () => {
     expect(en?.snapshot?.stats).toEqual([
       { label: 'Level', value: '25' },
       { label: 'Quests completed', value: '182' },
-      { label: 'Time played', value: '2d 3h' },
+      { label: 'Time played', value: '2d 3h 2m 34s' },
       { label: 'Snapshot date', value: 'June 5, 2026' },
     ])
 
@@ -58,7 +58,7 @@ describe('buildArchiveView', () => {
     expect(ru?.snapshot?.stats).toEqual([
       { label: 'Уровень', value: '25' },
       { label: 'Квестов выполнено', value: '182' },
-      { label: 'Времени в игре', value: '2 д 3 ч' },
+      { label: 'Времени в игре', value: '2 д 3 ч 2 мин 34 с' },
       { label: 'Дата снимка', value: '5 июня 2026 г.' },
     ])
   })
@@ -70,7 +70,7 @@ describe('buildArchiveView', () => {
       zones: [],
     })
     const view = buildArchiveView(journal, strings.en, 'en')
-    expect(view?.snapshot?.stats).toEqual([{ label: 'Time played', value: '0m' }])
+    expect(view?.snapshot?.stats).toEqual([{ label: 'Time played', value: '0s' }])
   })
 
   it('shows professions with a progress bar only when the maximum is valid', () => {
@@ -118,38 +118,58 @@ describe('buildArchiveView', () => {
     expect(view?.zones?.items[4].firstSeen).toBe('')
   })
 
-  it('saved statistics show the declared counter and the memory count, never event counts', () => {
-    const declared = journalWith({ professions: [], zones: [], deathsCounter: 24 })
-    expect(buildArchiveView(declared, strings.ru, 'ru')?.savedStats?.stats).toEqual([
-      { label: 'Смертей (сохранённый счётчик)', value: '24' },
-      { label: 'Воспоминаний', value: '7' },
-    ])
+  it('never repeats the intro counters: only a provenance note may mention them', () => {
+    // the declared counter is explained, never re-listed as a Saved Statistics
+    // section — the introduction already shows deaths and memories
+    const declared = journalWith({
+      recovered: { level: 25 },
+      professions: [],
+      zones: [],
+      deathsCounter: 24,
+    })
+    const view = buildArchiveView(declared, strings.ru, 'ru')
+    expect(view?.counterNote).toBe(
+      'Общее число смертей во вступлении — сохранённый счётчик аддона: летопись сохраняет лишь часть смертей как воспоминания.'
+    )
+    expect(view?.snapshot?.stats).toEqual([{ label: 'Уровень', value: '25' }])
+    expect(view?.professions).toBeNull()
+    expect(view?.zones).toBeNull()
 
     // no declared counter (journey.deaths would be a counted event fallback) →
-    // no death tile at all: the saved-counter label must never dress up an
-    // event count as a saved counter
-    const counted = journalWith({ professions: [], zones: [] })
-    expect(buildArchiveView(counted, strings.en, 'en')?.savedStats?.stats).toEqual([
-      { label: 'Memories', value: '7' },
-    ])
+    // no note: an event count must never be dressed up as a saved counter
+    const counted = journalWith({
+      recovered: { level: 25 },
+      professions: [],
+      zones: [],
+    })
+    expect(buildArchiveView(counted, strings.en, 'en')?.counterNote).toBeNull()
 
-    // a valid declared zero is a real value
-    const zero = journalWith({ professions: [], zones: [], deathsCounter: 0 }, 0)
-    expect(buildArchiveView(zero, strings.en, 'en')?.savedStats?.stats).toEqual([
-      { label: 'Deaths (saved counter)', value: '0' },
-      { label: 'Memories', value: '0' },
-    ])
+    // a declared zero is a real value and still gets its provenance note
+    const zero = journalWith(
+      { recovered: { level: 25 }, professions: [], zones: [], deathsCounter: 0 },
+      0
+    )
+    expect(buildArchiveView(zero, strings.en, 'en')?.counterNote).toBe(
+      'The death total in the introduction is the addon’s saved counter — the chronicle keeps only some deaths as memories.'
+    )
+  })
+
+  it('a declared counter alone is intro material, not an archive page', () => {
+    // nothing to show in the archive itself — the counter lives in the
+    // introduction, so the section must not render at all
+    const onlyCounter = journalWith({ professions: [], zones: [], deathsCounter: 24 })
+    expect(buildArchiveView(onlyCounter, strings.en, 'en')).toBeNull()
   })
 
   it('sections disappear when the file carries no data for them', () => {
     const view = buildArchiveView(
-      journalWith({ professions: [], zones: [], deathsCounter: 5 }),
+      journalWith({ recovered: { level: 25 }, professions: [], zones: [], deathsCounter: 5 }),
       strings.en,
       'en'
     )
-    expect(view?.snapshot).toBeNull()
+    expect(view?.snapshot).not.toBeNull()
     expect(view?.professions).toBeNull()
     expect(view?.zones).toBeNull()
-    expect(view?.savedStats).not.toBeNull()
+    expect(view?.counterNote).not.toBeNull()
   })
 })

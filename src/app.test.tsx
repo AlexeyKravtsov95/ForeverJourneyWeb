@@ -305,12 +305,18 @@ describe('SavedVariables import (UI)', () => {
     expect(html).toContain(
       'Исторический снимок из SavedVariables. Значения могут не соответствовать последнему состоянию персонажа.'
     )
-    expect(html).toContain('Смертей (сохранённый счётчик)') // the addon's counter: 1
+    // the addon's death counter (1) lives in the introduction; the archive
+    // only explains where the number comes from
+    expect(html).toContain('Смертей')
+    expect(html).toContain(
+      'Общее число смертей во вступлении — сохранённый счётчик аддона: летопись сохраняет лишь часть смертей как воспоминания.'
+    )
+    expect(html).not.toContain('Сохранённая статистика')
     // this file carries no professions or visited zones → sections stay hidden
     expect(html).not.toContain('Посещённые локации')
   })
 
-  it('an empty character renders the empty chronicle with only the saved counter', () => {
+  it('an empty character renders the empty chronicle; the saved zero counter lives in the introduction only', () => {
     const sv = readFixture()
     if (sv.status !== 'ok') throw new Error('fixture must parse')
     const journal = buildJournalFromSavedVariables(sv, 'Гордунни:Мрограмар')
@@ -331,8 +337,13 @@ describe('SavedVariables import (UI)', () => {
     expect(html).not.toContain('Квестов выполнено')
     expect(html).not.toContain('Времени в игре')
     expect(html).not.toContain('Исторический снимок')
-    // stats.deaths = 0 is declared by the addon — a real zero may show as 0
-    expect(html).toContain('Смертей (сохранённый счётчик)')
+    // stats.deaths = 0 is declared by the addon — a real zero may show as 0,
+    // but in the introduction now: with no snapshot/professions/zones the
+    // archive itself has nothing to show and must not render at all (the
+    // toolbar badge may still mention the archival source)
+    expect(html).toContain('Смертей')
+    expect(html).not.toContain('sheet--archive')
+    expect(html).not.toContain('Сохранённая статистика')
   })
 
   it('the whole SavedVariables pipeline runs without touching the network', async () => {
@@ -382,10 +393,10 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     expect(html).toContain(
       'Исторический снимок из SavedVariables. Значения могут не соответствовать последнему состоянию персонажа.'
     )
-    // snapshot: level 25, 182 quests, 183754 s = 2 д 3 ч, snapshot date
+    // snapshot: level 25, 182 quests, 183754 s exactly to the second, snapshot date
     expect(html).toContain('25')
     expect(html).toContain('182')
-    expect(html).toContain('2 д 3 ч')
+    expect(html).toContain('2 д 3 ч 2 мин 34 с')
     expect(html).toContain('Дата снимка')
     // professions with saved skill/maximum pairs (no invented skills)
     expect(html).toContain('Профессии')
@@ -408,11 +419,14 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     expect(html).not.toContain('1440')
     expect(html).not.toContain('1411')
     expect(html).not.toContain('1454')
-    // saved statistics: the addon counter 24, not the 3 chronicle DEATH events
-    expect(html).toContain('Сохранённая статистика')
-    expect(html).toContain('Смертей (сохранённый счётчик)')
+    // the intro already shows the overall counters (24 deaths, 7 memories);
+    // the archive only explains where the death number comes from
     expect(html).toContain('24')
     expect(html).toContain('Воспоминаний')
+    expect(html).not.toContain('Сохранённая статистика')
+    expect(html).toContain(
+      'Общее число смертей во вступлении — сохранённый счётчик аддона: летопись сохраняет лишь часть смертей как воспоминания.'
+    )
     // the toolbar states the archival source
     expect(html).toContain('Архив персонажа')
   })
@@ -426,9 +440,11 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     )
     expect(html).toContain('Professions')
     expect(html).toContain('Explored Locations')
-    expect(html).toContain('Saved Statistics')
-    expect(html).toContain('Deaths (saved counter)')
-    expect(html).toContain('Memories')
+    expect(html).not.toContain('Saved Statistics')
+    expect(html).toContain(
+      'The death total in the introduction is the addon\u2019s saved counter — the chronicle keeps only some deaths as memories.'
+    )
+    expect(html).toContain('2d 3h 2m 34s')
     expect(html).toContain('94 / 150')
   })
 
