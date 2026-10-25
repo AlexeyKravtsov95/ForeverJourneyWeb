@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildJournalFromSavedVariables, readSavedVariables } from './savedvariables'
+import { buildArchiveView } from './archive'
 import { buildChapters } from './chapters'
 import { localizeMemory } from './localize'
+import { strings } from '../i18n'
 
 const fixture = (name: string) =>
   readFileSync(new URL('../../fixtures/savedvariables/' + name, import.meta.url), 'utf8')
@@ -359,9 +361,9 @@ describe('journal conversion', () => {
     expect(journal?.character).toEqual({ name: 'Аэлириэн', race: '', class: '', level: 0 })
   })
 
-  it('keeps recoveredHistory as a historical snapshot, never as current stats', () => {
+  it('keeps recoveredHistory as a historical snapshot inside the archive, never as current stats', () => {
     const journal = buildJournalFromSavedVariables(sv, AELIRIEN)
-    expect(journal?.journey.recovered).toEqual({
+    expect(journal?.archive?.recovered).toEqual({
       capturedAt: 1_741_199_000 * 1000,
       completedQuests: 3,
       playedTotal: 7200,
@@ -371,9 +373,9 @@ describe('journal conversion', () => {
     expect(journal?.journey.completedQuests).toBeUndefined()
     expect(journal?.journey.totalPlayed).toBeUndefined()
 
-    // no recoveredHistory at all → the field stays absent
+    // no recoveredHistory at all → the archive carries only the other blocks
     const plain = buildJournalFromSavedVariables(sv, 'Silvermoon:Thalorien')
-    expect(plain?.journey.recovered).toBeUndefined()
+    expect(plain?.archive?.recovered).toBeUndefined()
 
     // an uninitialized snapshot carries default values, not data — skip it
     const uninitialized = [
@@ -387,7 +389,7 @@ describe('journal conversion', () => {
       '}',
     ].join('\n')
     expect(
-      buildJournalFromSavedVariables(mustRead(uninitialized), 'R:N')?.journey.recovered
+      buildJournalFromSavedVariables(mustRead(uninitialized), 'R:N')?.archive?.recovered
     ).toBeUndefined()
 
     // missing initialized flag counts as not initialized
@@ -401,7 +403,7 @@ describe('journal conversion', () => {
       '\t},',
       '}',
     ].join('\n')
-    expect(buildJournalFromSavedVariables(mustRead(noFlag), 'R:N')?.journey.recovered).toBeUndefined()
+    expect(buildJournalFromSavedVariables(mustRead(noFlag), 'R:N')?.archive?.recovered).toBeUndefined()
 
     // partial snapshot: only the fields actually present are known;
     // played.total = 0 is a known zero, not an unknown
@@ -416,7 +418,7 @@ describe('journal conversion', () => {
       '}',
     ].join('\n')
     const partialJournal = buildJournalFromSavedVariables(mustRead(partial), 'R:N')
-    expect(partialJournal?.journey.recovered).toEqual({ playedTotal: 0 })
+    expect(partialJournal?.archive?.recovered).toEqual({ playedTotal: 0 })
 
     // play time is seconds and must not be capped by the quest counter limit:
     // a veteran account snapshot can exceed a million seconds
@@ -433,7 +435,7 @@ describe('journal conversion', () => {
       '}',
     ].join('\n')
     const veteranJournal = buildJournalFromSavedVariables(mustRead(veteran), 'R:N')
-    expect(veteranJournal?.journey.recovered).toEqual({
+    expect(veteranJournal?.archive?.recovered).toEqual({
       capturedAt: 1_741_000_000 * 1000,
       completedQuests: 2500,
       playedTotal: 18_000_000,
@@ -452,7 +454,7 @@ describe('journal conversion', () => {
       '}',
     ].join('\n')
     const junkJournal = buildJournalFromSavedVariables(mustRead(junk), 'R:N')
-    expect(junkJournal?.journey.recovered).toBeUndefined()
+    expect(junkJournal?.archive?.recovered).toBeUndefined()
   })
 
   it('carries the import order through buildChapters (SavedVariables → Journal → Chapters)', () => {
@@ -505,6 +507,280 @@ describe('journal conversion', () => {
       'ForeverJourneyDB = { ["schemaVersion"] = 3, ["characters"] = { ["R:N"] = { ["memories"] = { { ["type"] = "ZONE" }, 42, "junk" } } } }'
     const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
     expect(journal?.memories).toHaveLength(1) // only the typed record survives
+  })
+})
+
+describe('character archive (FJ-WEB-06)', () => {
+  const STRAIDER = 'ClassicBetaPvP:Straider'
+  const straiderFixture = () => mustRead(fixture('ForeverJourney-straider.lua'))
+
+  it('builds the full Straider archive: snapshot, professions, zones, saved counter', () => {
+    const journal = buildJournalFromSavedVariables(straiderFixture(), STRAIDER)
+    if (!journal) throw new Error('straider journal must build')
+
+    // chronicle: exactly 7 memories — 4 ZONE + 3 DEATH, nothing synthesized
+    expect(journal.memories).toHaveLength(7)
+    expect(journal.memories.filter((m) => m.type === 'ZONE')).toHaveLength(4)
+    expect(journal.memories.filter((m) => m.type === 'DEATH')).toHaveLength(3)
+
+    // saved death counter is the addon's own 24 — not the 3 chronicle events
+    expect(journal.journey.deaths).toBe(24)
+    expect(journal.archive?.deathsCounter).toBe(24)
+
+    // snapshot values exactly as archived; currentLevel (43210 s at level) is
+    // play time at the current level and never becomes the character level
+    expect(journal.archive?.recovered).toEqual({
+      capturedAt: Math.floor(Date.UTC(2026, 5, 5, 12) / 1000) * 1000,
+      completedQuests: 182,
+      playedTotal: 183_754,
+      level: 25,
+    })
+    expect(journal.character.level).toBe(0) // no live level in SavedVariables
+
+    // three professions with saved skill and maximum
+    expect(journal.archive?.professions).toEqual([
+      { name: 'Горное дело', skillLevel: 94, maxSkillLevel: 150 },
+      { name: 'Инженерное дело', skillLevel: 91, maxSkillLevel: 150 },
+      { name: 'Кулинария', skillLevel: 25, maxSkillLevel: 75 },
+    ])
+
+    // six visited zones in the real mapID form — deliberately not equal to the
+    // four ZONE events of the chronicle; identifiers never surface as names
+    expect(journal.archive?.zones).toHaveLength(6)
+    const byName = new Map((journal.archive?.zones ?? []).map((zone) => [zone.name, zone]))
+    expect(byName.get('Калимдор')?.firstSeenAt).toBe(1_791_569_866 * 1000)
+    expect(byName.get('Ясеневый лес')?.firstSeenAt).toBe(1_791_569_869 * 1000)
+    expect(byName.get('Азшара')?.firstSeenAt).toBe(1_791_573_870 * 1000)
+    expect(byName.get('Дуротар')?.firstSeenAt).toBe(1_791_573_890 * 1000)
+    expect(byName.get('Оргриммар')?.firstSeenAt).toBe(1_791_573_891 * 1000)
+    expect(byName.get('Степи')?.firstSeenAt).toBe(1_791_574_879 * 1000)
+    for (const zone of journal.archive?.zones ?? []) {
+      expect(/^\d+$/.test(zone.name)).toBe(false) // a mapID must never leak as a name
+    }
+
+    // the shared archive view lists the zones chronologically with their dates
+    const view = buildArchiveView(journal, strings.ru, 'ru')
+    expect(view?.zones?.items.map((zone) => zone.name)).toEqual([
+      'Калимдор',
+      'Ясеневый лес',
+      'Азшара',
+      'Дуротар',
+      'Оргриммар',
+      'Степи',
+    ])
+  })
+
+  it('questIDs never become memories and currentLevel never becomes a level', () => {
+    const journal = buildJournalFromSavedVariables(straiderFixture(), STRAIDER)
+    // 12 questIDs in the snapshot + 7 real memories = still exactly 7
+    expect(journal?.memories).toHaveLength(7)
+    expect(journal?.memories.every((memory) => memory.type === 'ZONE' || memory.type === 'DEATH')).toBe(true)
+    expect(journal?.archive?.recovered?.level).toBe(25)
+  })
+
+  it('archives of different characters never mix', () => {
+    const journal = buildJournalFromSavedVariables(straiderFixture(), 'ClassicBetaPvP:Testpilot')
+    if (!journal) throw new Error('journal must build')
+    expect(journal.character.name).toBe('Testpilot')
+    expect(journal.memories).toHaveLength(1)
+    expect(journal.archive?.recovered).toEqual({
+      capturedAt: Math.floor(Date.UTC(2026, 6, 14) / 1000) * 1000,
+      completedQuests: 12,
+      playedTotal: 3600,
+      level: 10,
+    })
+    expect(journal.archive?.professions).toEqual([
+      { name: 'Кожевничество', skillLevel: 45, maxSkillLevel: 75 },
+    ])
+    expect(journal.archive?.zones).toEqual([
+      { name: 'Дун Морог', firstSeenAt: Math.floor(Date.UTC(2026, 6, 14) / 1000) * 1000 },
+    ])
+  })
+
+  it('an uninitialized snapshot drops its professions too', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["recoveredHistory"] = { ["initialized"] = false,',
+      '\t\t\t\t["professions"] = { { ["name"] = "Горное дело", ["skillLevel"] = 94, ["maxSkillLevel"] = 150 } } },',
+      '\t\t\t["visitedZones"] = { ["Дун Морог"] = 1780401600 },',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
+    expect(journal?.archive?.recovered).toBeUndefined()
+    expect(journal?.archive?.professions).toEqual([])
+    // zones are tracked independently of the snapshot and stay
+    expect(journal?.archive?.zones).toEqual([{ name: 'Дун Морог', firstSeenAt: 1_780_401_600 * 1000 }])
+  })
+
+  it('professions survive only with a name; invalid numbers are dropped, not zeroed', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["recoveredHistory"] = { ["initialized"] = true,',
+      '\t\t\t\t["professions"] = {',
+      '\t\t\t\t\t{ ["skillLevel"] = 94 },',
+      '\t\t\t\t\t{ ["name"] = "Травничество" },',
+      '\t\t\t\t\t{ ["name"] = "Портняжное дело", ["skillLevel"] = -5, ["maxSkillLevel"] = 0 },',
+      '\t\t\t\t\t{ ["name"] = "Наложение чар", ["skillLevel"] = 200.7, ["maxSkillLevel"] = 300 },',
+      '\t\t\t\t\t"junk",',
+      '\t\t\t\t},',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
+    expect(journal?.archive?.professions).toEqual([
+      { name: 'Травничество' }, // name only — no valid numbers, none invented
+      { name: 'Портняжное дело' }, // -5 and 0 are defaults/junk → dropped, not zeroed
+      { name: 'Наложение чар', skillLevel: 200, maxSkillLevel: 300 }, // floored
+    ])
+  })
+
+  it('visitedZones: confirmed mapID form plus the legacy map and undated entries', () => {
+    // the real addon shape: numeric mapID keys → { name, firstSeenAt }
+    const mapIdForm = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["visitedZones"] = {',
+      '\t\t\t\t[1447] = { ["name"] = "Азшара", ["firstSeenAt"] = 1791573870 },',
+      '\t\t\t\t[9999] = { ["firstSeenAt"] = 1791573870 },',
+      '\t\t\t\t[1411] = { ["name"] = "Дуротар" },',
+      '\t\t\t\t[1234] = 1791573870,',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const mapId = buildJournalFromSavedVariables(mustRead(mapIdForm), 'R:N')
+    // model order follows the file's table keys (numeric keys ascend); the
+    // display order is the view's chronological sort, asserted separately
+    const byName = new Map((mapId?.archive?.zones ?? []).map((zone) => [zone.name, zone]))
+    expect([...byName.keys()].sort()).toEqual(['Азшара', 'Дуротар'])
+    expect(byName.get('Азшара')).toEqual({ name: 'Азшара', firstSeenAt: 1_791_573_870 * 1000 })
+    expect(byName.get('Дуротар')).toEqual({ name: 'Дуротар' }) // no time → undated
+
+    // legacy shapes keep working: zone-name map with a bare time or a table,
+    // and record entries with zone/firstSeen/timestamp field names
+    const legacyMap = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["visitedZones"] = {',
+      '\t\t\t\t["Дун Морог"] = 1780401600,',
+      '\t\t\t\t["Лох Модан"] = { ["firstSeen"] = 1781006400 },',
+      '\t\t\t\t["Тернистая долина"] = "не дата",',
+      '\t\t\t\t[""] = 1780401600,',
+      '\t\t\t\t{ ["zone"] = "Танарис", ["timestamp"] = 1781400000 },',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const legacy = buildJournalFromSavedVariables(mustRead(legacyMap), 'R:N')
+    const legacyByName = new Map((legacy?.archive?.zones ?? []).map((zone) => [zone.name, zone]))
+    expect([...legacyByName.keys()].sort()).toEqual([
+      'Дун Морог',
+      'Лох Модан',
+      'Танарис',
+      'Тернистая долина',
+    ])
+    expect(legacyByName.get('Дун Морог')).toEqual({ name: 'Дун Морог', firstSeenAt: 1_780_401_600 * 1000 })
+    expect(legacyByName.get('Лох Модан')).toEqual({ name: 'Лох Модан', firstSeenAt: 1_781_006_400 * 1000 })
+    expect(legacyByName.get('Тернистая долина')).toEqual({ name: 'Тернистая долина' }) // invalid time
+    expect(legacyByName.get('Танарис')).toEqual({ name: 'Танарис', firstSeenAt: 1_781_400_000 * 1000 })
+  })
+
+  it('empty professions and visitedZones leave the archive without those blocks', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["stats"] = { ["deaths"] = 3 },',
+      '\t\t\t["recoveredHistory"] = { ["initialized"] = true, ["professions"] = { } },',
+      '\t\t\t["visitedZones"] = { },',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
+    expect(journal?.archive).toEqual({ professions: [], zones: [], deathsCounter: 3 })
+
+    // nothing archival at all → no archive block, no section in the book
+    const bare = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = { ["createdAt"] = 1780401600 },',
+      '\t},',
+      '}',
+    ].join('\n')
+    const bareJournal = buildJournalFromSavedVariables(mustRead(bare), 'R:N')
+    expect(bareJournal?.archive).toBeUndefined()
+  })
+
+  it('dangerous Lua keys stay plain zone and profession names, never prototype members', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["recoveredHistory"] = { ["initialized"] = true,',
+      '\t\t\t\t["professions"] = {',
+      '\t\t\t\t\t{ ["name"] = "__proto__", ["skillLevel"] = 10, ["maxSkillLevel"] = 75 },',
+      '\t\t\t\t\t{ ["name"] = "constructor", ["skillLevel"] = 20, ["maxSkillLevel"] = 75 },',
+      '\t\t\t\t},',
+      '\t\t\t},',
+      '\t\t\t["visitedZones"] = {',
+      '\t\t\t\t["__proto__"] = 1780401600,',
+      '\t\t\t\t["constructor"] = 1780401700,',
+      '\t\t\t\t["toString"] = 1780401800,',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
+    expect(journal?.archive?.professions.map((p) => p.name)).toEqual(['__proto__', 'constructor'])
+    expect(journal?.archive?.zones).toHaveLength(3)
+    expect(journal?.archive?.zones.map((z) => z.name)).toEqual(['__proto__', 'constructor', 'toString'])
+    // the parser's null-prototype dictionaries make these plain own keys —
+    // Object.prototype pollution is separately covered by the parser suite
+  })
+
+  it('invalid snapshot numbers are dropped instead of becoming zeros', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      '\t\t\t["recoveredHistory"] = { ["initialized"] = true,',
+      '\t\t\t\t["level"] = 0, ["capturedAt"] = -1,',
+      '\t\t\t\t["completedQuests"] = { ["count"] = -3 },',
+      '\t\t\t\t["played"] = { ["total"] = "many" },',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:N')
+    expect(journal?.archive?.recovered).toBeUndefined() // every number invalid → no snapshot
+    expect(journal?.archive?.deathsCounter).toBeUndefined()
+    // but a separately valid level must survive next to invalid neighbors
+    const mixed = source.replace('["level"] = 0,', '["level"] = 42,')
+    const mixedJournal = buildJournalFromSavedVariables(mustRead(mixed), 'R:N')
+    expect(mixedJournal?.archive?.recovered).toEqual({ level: 42 })
   })
 })
 

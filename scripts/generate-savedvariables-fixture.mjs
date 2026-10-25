@@ -18,7 +18,9 @@ function lua(value, indent = '\t') {
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   const inner = indent + '\t'
   const fields = Object.entries(value).map(([key, val]) => {
-    return `${inner}[${luaString(key)}] = ${lua(val, inner)}`
+    // WoW writes numeric table keys unquoted ([1447] = { … }), strings quoted
+    const keyLua = /^\d+$/.test(key) ? key : luaString(key)
+    return `${inner}[${keyLua}] = ${lua(val, inner)}`
   })
   if (fields.length === 0) return '{ }'
   return `{\n${fields.join(',\n')},\n${indent}}`
@@ -286,6 +288,142 @@ const brokenLua = [
   '\t\t["Test:Broken"] = {',
 ].join('\n')
 
+// ---------------------------------------------------------------------------
+// FJ-WEB-06 Character Archive fixture: ClassicBetaPvP:Straider — sanitized,
+// built to the real archived values of the beta character the task contract
+// describes (7 memories, 24 saved deaths vs 3 DEATH events, 6 visited zones
+// vs 4 ZONE events, snapshot level 25 / 182 quests / 183754 s played, three
+// professions). A second synthetic character proves archives never merge.
+// ---------------------------------------------------------------------------
+const june = (day, hour = 12) => Math.floor(Date.UTC(2026, 5, day, hour) / 1000)
+const later = (month, day) => Math.floor(Date.UTC(2026, month, day) / 1000)
+
+const straiderMemories = [
+  memory({
+    type: 'ZONE',
+    source: 'RECORDED',
+    timestamp: june(3),
+    location: 'Дун Морог',
+    data: { zoneName: 'Dun Morogh' },
+  }),
+  memory({
+    type: 'ZONE',
+    source: 'RECORDED',
+    timestamp: june(10),
+    location: 'Лох Модан',
+    data: { zoneName: 'Loch Modan' },
+  }),
+  memory({
+    type: 'DEATH',
+    source: 'RECORDED',
+    timestamp: june(12),
+    location: 'Лох Модан',
+    data: { cause: 'ENVIRONMENTAL', environmentalType: 'FALLING' },
+  }),
+  memory({
+    type: 'ZONE',
+    source: 'RECORDED',
+    timestamp: june(18),
+    location: 'Болото Печали',
+    data: { zoneName: 'Wetlands' },
+  }),
+  memory({
+    type: 'DEATH',
+    source: 'RECORDED',
+    timestamp: june(25),
+    location: 'Болото Печали',
+    data: { killerName: 'Blackrock Ogre', killerNameRaw: 'Blackrock Ogre', spellName: 'Ogre Smash' },
+  }),
+  memory({
+    type: 'ZONE',
+    source: 'RECORDED',
+    timestamp: later(6, 2),
+    location: 'Сумеречный лес',
+    data: { zoneName: 'Duskwood' },
+  }),
+  memory({
+    type: 'DEATH',
+    source: 'RECORDED',
+    timestamp: later(6, 9),
+    location: 'Сумеречный лес',
+    data: {},
+  }),
+]
+
+// six visited zones in the real addon shape — numeric mapID keys →
+// { name, firstSeenAt } — deliberately not equal to the four ZONE events
+// above; the identifiers must never surface as zone names
+const straiderVisitedZones = {
+  1447: { name: 'Азшара', firstSeenAt: 1_791_573_870 },
+  1413: { name: 'Степи', firstSeenAt: 1_791_574_879 },
+  1440: { name: 'Ясеневый лес', firstSeenAt: 1_791_569_869 },
+  1414: { name: 'Калимдор', firstSeenAt: 1_791_569_866 },
+  1411: { name: 'Дуротар', firstSeenAt: 1_791_573_890 },
+  1454: { name: 'Оргриммар', firstSeenAt: 1_791_573_891 },
+}
+
+const straiderDb = {
+  schemaVersion: 3,
+  addonVersion: '0.9.8',
+  characters: {
+    'ClassicBetaPvP:Straider': {
+      createdAt: june(2),
+      stats: { deaths: 24 },
+      recoveredHistory: {
+        initialized: true,
+        capturedAt: june(5),
+        level: 25,
+        completedQuests: {
+          count: 182,
+          // raw quest IDs are preserved by the addon but must never become
+          // extra memories on the site
+          questIDs: indexed([312, 314, 319, 320, 337, 341, 364, 371, 386, 393, 402, 419]),
+        },
+        played: {
+          total: 183754,
+          currentLevel: 43210, // play time at the current level, NOT a level
+        },
+        professions: indexed([
+          { name: 'Горное дело', skillLevel: 94, maxSkillLevel: 150 },
+          { name: 'Инженерное дело', skillLevel: 91, maxSkillLevel: 150 },
+          { name: 'Кулинария', skillLevel: 25, maxSkillLevel: 75 },
+        ]),
+      },
+      visitedZones: straiderVisitedZones,
+      memories: indexed(straiderMemories),
+    },
+    // second synthetic character: archives of different characters never mix
+    'ClassicBetaPvP:Testpilot': {
+      createdAt: later(6, 14),
+      stats: { deaths: 2 },
+      recoveredHistory: {
+        initialized: true,
+        capturedAt: later(6, 14),
+        level: 10,
+        completedQuests: { count: 12 },
+        played: { total: 3600 },
+        professions: indexed([{ name: 'Кожевничество', skillLevel: 45, maxSkillLevel: 75 }]),
+      },
+      visitedZones: { 'Дун Морог': later(6, 14) },
+      memories: indexed([
+        memory({
+          type: 'ZONE',
+          source: 'RECORDED',
+          timestamp: later(6, 15),
+          location: 'Дун Морог',
+          data: { zoneName: 'Dun Morogh' },
+        }),
+      ]),
+    },
+  },
+}
+
+const straiderLua = [
+  '-- FJ-WEB-06 fixture: sanitized Character Archive of the beta character',
+  `ForeverJourneyDB = ${lua(straiderDb)}`,
+  '',
+].join('\r\n')
+
 const maliciousLua = [
   '-- fixture: dangerous Lua constructs that must be rejected, never executed',
   'ForeverJourneyDB = {',
@@ -311,8 +449,9 @@ const maliciousLua = [
 
 mkdirSync(OUT, { recursive: true })
 writeFileSync(resolve(OUT, 'ForeverJourney.lua'), mainLua, 'utf8')
+writeFileSync(resolve(OUT, 'ForeverJourney-straider.lua'), straiderLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-schema2.lua'), schemaTwoLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-otherdb.lua'), otherDbLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-broken.lua'), brokenLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-malicious.lua'), maliciousLua, 'utf8')
-console.log('SavedVariables fixtures written to fixtures/savedvariables/ (5 files)')
+console.log('SavedVariables fixtures written to fixtures/savedvariables/ (6 files)')

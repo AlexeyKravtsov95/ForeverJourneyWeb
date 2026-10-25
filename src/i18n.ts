@@ -74,6 +74,17 @@ export interface Strings {
   favoriteLabel: string
   emptyChronicle: string
   endTitle: string
+  archiveTitle: string
+  archiveSnapshotTitle: string
+  archiveSnapshotNote: string
+  archiveSnapshotDate: string
+  archiveProfessionsTitle: string
+  archiveZonesTitle: string
+  archiveSavedStatsTitle: string
+  archiveStatDeathsSaved: string
+  archiveStatMemories: string
+  importFjbookHint: string
+  svArchiveBadge: string
 }
 
 export const strings: Record<Lang, Strings> = {
@@ -85,9 +96,11 @@ export const strings: Record<Lang, Strings> = {
     importPlaceholder: 'Paste the FJBOOK1 export code here…',
     importButton: 'Import Journal',
     demoButton: 'Try Demo Journal',
+    importFjbookHint:
+      'A book from the in-game export: the adventure chronicle exactly as the addon exported it.',
     importSvLabel: 'Import SavedVariables',
     importSvHint:
-      'Upload the addon database file straight from disk — no chat export needed. Everything stays in your browser.',
+      'Upload the addon database file straight from disk — no chat export needed. The book also gains a Character Archive with whatever the file preserved (historical snapshot, professions, explored locations). Everything stays in your browser.',
     importSvButton: 'Import SavedVariables',
     svPathTitle: 'How to get the file',
     svHowSteps: [
@@ -180,6 +193,17 @@ export const strings: Record<Lang, Strings> = {
     favoriteLabel: 'Favorite',
     emptyChronicle: 'The chronicle awaits its first entry.',
     endTitle: 'The journey continues…',
+    archiveTitle: 'Character Archive',
+    archiveSnapshotTitle: 'Historical Snapshot',
+    archiveSnapshotNote:
+      'Historical snapshot from SavedVariables. These values may not represent the character\u2019s final state.',
+    archiveSnapshotDate: 'Snapshot date',
+    archiveProfessionsTitle: 'Professions',
+    archiveZonesTitle: 'Explored Locations',
+    archiveSavedStatsTitle: 'Saved Statistics',
+    archiveStatDeathsSaved: 'Deaths (saved counter)',
+    archiveStatMemories: 'Memories',
+    svArchiveBadge: 'Character Archive',
   },
   ru: {
     brandName: 'Forever Journey',
@@ -189,9 +213,11 @@ export const strings: Record<Lang, Strings> = {
     importPlaceholder: 'Вставьте здесь экспортный код FJBOOK1…',
     importButton: 'Импортировать журнал',
     demoButton: 'Демо-журнал',
+    importFjbookHint:
+      'Книга из игрового экспорта: летопись приключений в том виде, в каком её сохранил аддон.',
     importSvLabel: 'Импорт SavedVariables',
     importSvHint:
-      'Загрузите файл базы аддона прямо с диска — экспорт в чат не нужен. Всё остаётся в вашем браузере.',
+      'Загрузите файл базы аддона прямо с диска — экспорт в чат не нужен. Книга дополняется архивом персонажа из того, что сохранилось в файле (исторический снимок, профессии, посещённые локации). Всё остаётся в вашем браузере.',
     importSvButton: 'Импортировать SavedVariables',
     svPathTitle: 'Как получить файл',
     svHowSteps: [
@@ -281,5 +307,16 @@ export const strings: Record<Lang, Strings> = {
     favoriteLabel: 'Избранное',
     emptyChronicle: 'Летопись ждёт первой записи.',
     endTitle: 'Путешествие продолжается…',
+    archiveTitle: 'Архив персонажа',
+    archiveSnapshotTitle: 'Исторический снимок',
+    archiveSnapshotNote:
+      'Исторический снимок из SavedVariables. Значения могут не соответствовать последнему состоянию персонажа.',
+    archiveSnapshotDate: 'Дата снимка',
+    archiveProfessionsTitle: 'Профессии',
+    archiveZonesTitle: 'Посещённые локации',
+    archiveSavedStatsTitle: 'Сохранённая статистика',
+    archiveStatDeathsSaved: 'Смертей (сохранённый счётчик)',
+    archiveStatMemories: 'Воспоминаний',
+    svArchiveBadge: 'Архив персонажа',
   },
 }

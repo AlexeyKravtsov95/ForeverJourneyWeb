@@ -137,6 +137,7 @@ export default function Landing({ tr, lang, onLangChange, onImported, onSavedVar
         <label className="panel__label" htmlFor="fj-code">
           {tr.importLabel}
         </label>
+        <p className="panel__hint">{tr.importFjbookHint}</p>
         <textarea
           id="fj-code"
           className="panel__textarea"

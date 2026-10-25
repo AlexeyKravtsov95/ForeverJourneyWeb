@@ -35,8 +35,6 @@ export interface JournalJourney {
   deaths?: number
   completedQuests?: number
   totalPlayed?: number
-  /** Historical snapshot from SavedVariables; never filled by FJBOOK1. */
-  recovered?: RecoveredHistory
 }
 
 export interface JournalMemory {
@@ -51,6 +49,40 @@ export interface JournalMemory {
   location: string
 }
 
+/** A profession saved in the historical snapshot; the name is kept as recorded. */
+export interface ArchivedProfession {
+  name: string
+  /** Saved skill level; unknown stays undefined instead of becoming 0. */
+  skillLevel?: number
+  maxSkillLevel?: number
+}
+
+/** A zone the addon recorded visiting, with the first-discovery time if saved. */
+export interface ArchivedZoneVisit {
+  name: string
+  firstSeenAt?: number
+}
+
+/**
+ * Character Archive — optional journal block filled only by the
+ * SavedVariables import (FJBOOK1 never carries one, and validateJournal drops
+ * an unknown `archive` field from an export). Counters here are saved values
+ * from the file, never event counts recomputed from the chronicle.
+ */
+export interface CharacterArchive {
+  /** Historical snapshot (`recoveredHistory`), trusted only when initialized. */
+  recovered?: RecoveredHistory
+  /** Professions of the snapshot, in saved order. */
+  professions: ArchivedProfession[]
+  /** Visited zones; sorted chronologically for display. */
+  zones: ArchivedZoneVisit[]
+  /**
+   * The addon's own saved death counter (`stats.deaths`), exactly as declared —
+   * distinct from journey.deaths, which may fall back to counting DEATH events.
+   */
+  deathsCounter?: number
+}
+
 export interface Journal {
   format: 'FJJOURNAL'
   formatVersion: 1
@@ -60,6 +92,8 @@ export interface Journal {
   character: JournalCharacter
   journey: JournalJourney
   memories: JournalMemory[]
+  /** Present only when the SavedVariables import actually found archive data. */
+  archive?: CharacterArchive
 }
 
 export type JournalErrorCode = 'WRONG_FORMAT' | 'UNSUPPORTED_VERSION' | 'INVALID_SCHEMA'

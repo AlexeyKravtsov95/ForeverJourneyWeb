@@ -250,7 +250,7 @@ describe('SavedVariables import (UI)', () => {
     expect(html).toContain('2 favorite(s)')
   })
 
-  it('a picked character renders a full book with hidden unknown stats', () => {
+  it('a picked character renders a full book with the archive snapshot clearly labeled historical', () => {
     const sv = readFixture()
     if (sv.status !== 'ok') throw new Error('fixture must parse')
     const journal = buildJournalFromSavedVariables(sv, aelirienKey)
@@ -265,7 +265,7 @@ describe('SavedVariables import (UI)', () => {
         onLangChange={() => undefined}
         onBack={() => undefined}
         journal={journal}
-        meta={{ kind: 'savedvariables' as const, schema: sv.schemaVersion, memories: 14 }}
+        meta={{ kind: 'savedvariables' as const, schema: sv.schemaVersion, memories: 14, archive: true }}
       />
     )
     // manual texts survive verbatim (newlines and quotes included)
@@ -298,16 +298,19 @@ describe('SavedVariables import (UI)', () => {
     expect(html.indexOf('Выполнено 25 заданий')).toBeLessThan(
       html.indexOf('Открыта локация: Western Plaguelands')
     )
-    // SavedVariables has no live level/race/class/quests/play time — no fake
-    // zeros, and the recoveredHistory snapshot is not shown as current stats
-    expect(html).not.toContain('Квестов выполнено')
-    expect(html).not.toContain('Времени в игре')
-    expect(html).not.toContain('Уровень</span>')
-    // the addon's own death counter is shown
-    expect(html).toContain('Смертей')
+    // the archive shows the recoveredHistory snapshot — but only inside its
+    // own clearly-labeled historical section, never as current stats
+    expect(html).toContain('Архив персонажа')
+    expect(html).toContain('Исторический снимок')
+    expect(html).toContain(
+      'Исторический снимок из SavedVariables. Значения могут не соответствовать последнему состоянию персонажа.'
+    )
+    expect(html).toContain('Смертей (сохранённый счётчик)') // the addon's counter: 1
+    // this file carries no professions or visited zones → sections stay hidden
+    expect(html).not.toContain('Посещённые локации')
   })
 
-  it('an empty character renders the empty chronicle without fake stats', () => {
+  it('an empty character renders the empty chronicle with only the saved counter', () => {
     const sv = readFixture()
     if (sv.status !== 'ok') throw new Error('fixture must parse')
     const journal = buildJournalFromSavedVariables(sv, 'Гордунни:Мрограмар')
@@ -320,13 +323,16 @@ describe('SavedVariables import (UI)', () => {
         onLangChange={() => undefined}
         onBack={() => undefined}
         journal={journal}
-        meta={{ kind: 'savedvariables' as const, schema: 3, memories: 0 }}
+        meta={{ kind: 'savedvariables' as const, schema: 3, memories: 0, archive: true }}
       />
     )
     expect(html).toContain('Летопись ждёт первой записи.')
-    // stats.deaths = 0 in the file → the addon counter says zero, it may show 0
+    // no snapshot in this file → its labels never appear
     expect(html).not.toContain('Квестов выполнено')
     expect(html).not.toContain('Времени в игре')
+    expect(html).not.toContain('Исторический снимок')
+    // stats.deaths = 0 is declared by the addon — a real zero may show as 0
+    expect(html).toContain('Смертей (сохранённый счётчик)')
   })
 
   it('the whole SavedVariables pipeline runs without touching the network', async () => {
@@ -339,5 +345,128 @@ describe('SavedVariables import (UI)', () => {
     const journal = buildJournalFromSavedVariables(sv, aelirienKey)
     expect(journal).not.toBeNull()
     expect(journal?.memories.length).toBe(14)
+  })
+})
+
+describe('Character Archive (web, FJ-WEB-06)', () => {
+  const STRAIDER = 'ClassicBetaPvP:Straider'
+  const straiderJournal = () => {
+    const lua = readFileSync(
+      new URL('../fixtures/savedvariables/ForeverJourney-straider.lua', import.meta.url),
+      'utf8'
+    )
+    const sv = readSavedVariables(lua)
+    if (sv.status !== 'ok') throw new Error('straider fixture must parse')
+    const journal = buildJournalFromSavedVariables(sv, STRAIDER)
+    if (!journal) throw new Error('straider journal must build')
+    return journal
+  }
+
+  const renderBook = (journal: Journal, lang: 'en' | 'ru') =>
+    renderToString(
+      <Book
+        tr={strings[lang]}
+        lang={lang}
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={journal}
+        meta={{ kind: 'savedvariables' as const, schema: 3, memories: 7, archive: true }}
+      />
+    )
+
+  it('renders the complete Straider archive in Russian with every value in its section', () => {
+    const html = renderBook(straiderJournal(), 'ru')
+    // section title and the explicitly required disclaimer
+    expect(html).toContain('Архив персонажа')
+    expect(html).toContain('Исторический снимок')
+    expect(html).toContain(
+      'Исторический снимок из SavedVariables. Значения могут не соответствовать последнему состоянию персонажа.'
+    )
+    // snapshot: level 25, 182 quests, 183754 s = 2 д 3 ч, snapshot date
+    expect(html).toContain('25')
+    expect(html).toContain('182')
+    expect(html).toContain('2 д 3 ч')
+    expect(html).toContain('Дата снимка')
+    // professions with saved skill/maximum pairs (no invented skills)
+    expect(html).toContain('Профессии')
+    expect(html).toContain('Горное дело')
+    expect(html).toContain('94 / 150')
+    expect(html).toContain('Инженерное дело')
+    expect(html).toContain('91 / 150')
+    expect(html).toContain('Кулинария')
+    expect(html).toContain('25 / 75')
+    // six visited zones from the real mapID form, chronological in the list;
+    // the numeric identifiers must never surface as zone names
+    expect(html).toContain('Посещённые локации')
+    expect((html.match(/zone__name/g) ?? []).length).toBe(6)
+    const zoneOrder = ['Калимдор', 'Ясеневый лес', 'Азшара', 'Дуротар', 'Оргриммар', 'Степи']
+    for (const name of zoneOrder) expect(html).toContain(name)
+    for (let index = 1; index < zoneOrder.length; index++) {
+      expect(html.indexOf(zoneOrder[index - 1])).toBeLessThan(html.indexOf(zoneOrder[index]))
+    }
+    expect(html).not.toContain('1447')
+    expect(html).not.toContain('1440')
+    expect(html).not.toContain('1411')
+    expect(html).not.toContain('1454')
+    // saved statistics: the addon counter 24, not the 3 chronicle DEATH events
+    expect(html).toContain('Сохранённая статистика')
+    expect(html).toContain('Смертей (сохранённый счётчик)')
+    expect(html).toContain('24')
+    expect(html).toContain('Воспоминаний')
+    // the toolbar states the archival source
+    expect(html).toContain('Архив персонажа')
+  })
+
+  it('renders the same archive in English', () => {
+    const html = renderBook(straiderJournal(), 'en')
+    expect(html).toContain('Character Archive')
+    expect(html).toContain('Historical Snapshot')
+    expect(html).toContain(
+      'Historical snapshot from SavedVariables. These values may not represent the character\u2019s final state.'
+    )
+    expect(html).toContain('Professions')
+    expect(html).toContain('Explored Locations')
+    expect(html).toContain('Saved Statistics')
+    expect(html).toContain('Deaths (saved counter)')
+    expect(html).toContain('Memories')
+    expect(html).toContain('94 / 150')
+  })
+
+  it('shows no archive section for FJBOOK1 journals (demo keeps working)', () => {
+    const en = renderToString(
+      <Book
+        tr={strings.en}
+        lang="en"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={demoJournal}
+        meta={fjMeta}
+      />
+    )
+    expect(en).toContain('My Journey') // the demo book itself renders as before
+    expect(en).not.toContain('Character Archive')
+    expect(en).not.toContain('Historical Snapshot')
+
+    const ru = renderToString(
+      <Book
+        tr={strings.ru}
+        lang="ru"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={demoJournal}
+        meta={fjMeta}
+      />
+    )
+    expect(ru).not.toContain('Архив персонажа')
+  })
+
+  it('the landing explains the difference between the two import ways in both languages', () => {
+    const en = landing('en')
+    expect(en).toContain('A book from the in-game export')
+    expect(en).toContain('a Character Archive with whatever the file preserved')
+
+    const ru = landing('ru')
+    expect(ru).toContain('Книга из игрового экспорта')
+    expect(ru).toContain('архивом персонажа из того, что сохранилось в файле')
   })
 })
