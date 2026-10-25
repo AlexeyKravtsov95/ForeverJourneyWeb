@@ -1,5 +1,5 @@
 import type { Journal } from '../lib/journal'
-import { formatDate } from '../lib/format'
+import { coverDateRange } from '../lib/format'
 import { fmt, type Lang, type Strings } from '../i18n'
 import { CornerFlourish, Crest } from './Ornaments'
 
@@ -10,25 +10,12 @@ interface Props {
 }
 
 export default function Cover({ journal, tr, lang }: Props) {
-  const { character, journey } = journal
-  const times = journal.memories
-    .map((memory) => memory.timestamp)
-    .filter((value): value is number => typeof value === 'number')
-  const firstMemory = times.length ? Math.min(...times) : undefined
-  const lastMemory = times.length ? Math.max(...times) : undefined
-  const exportedAt = journal.exportedAt
-  const start = journey.startedAt ?? firstMemory
-  const end = lastMemory ?? exportedAt
+  const { character } = journal
 
   const metaParts = [character.race, character.class]
   if (character.level > 0) metaParts.push(fmt(tr.levelN, { level: character.level }))
 
-  let dates = ''
-  if (start && end && start !== end) {
-    dates = `${formatDate(start, lang)} — ${formatDate(end, lang)}`
-  } else if (start ?? end) {
-    dates = formatDate((start ?? end) as number, lang)
-  }
+  const dates = coverDateRange(journal, lang)
 
   return (
     <section className="sheet sheet--cover" aria-label={tr.coverTitle}>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Journal } from '../lib/journal'
 import { buildJournalFromSavedVariables, type SavedVariablesOk } from '../lib/savedvariables'
-import { formatDate } from '../lib/format'
+import { formatDateRange } from '../lib/format'
 import { fmt, type Lang, type Strings } from '../i18n'
 import { Divider } from './Ornaments'
 import type { ImportSummary } from './Book'
@@ -87,12 +87,8 @@ export default function CharacterPicker({
 
         <ul className="picker__list">
           {sv.characters.map((character) => {
-            const range = [
-              formatDate(character.firstMemoryAt, lang),
-              formatDate(character.lastMemoryAt, lang),
-            ]
-              .filter(Boolean)
-              .join(' — ')
+            // one calendar day collapses into a single date (same rule as the cover)
+            const range = formatDateRange(character.firstMemoryAt, character.lastMemoryAt, lang)
             const meta = [
               fmt(tr.svCharacterMemories, { memories: character.memories }),
               ...(character.favorites > 0

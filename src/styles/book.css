@@ -275,11 +275,15 @@
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  /* min() guards sub-290px screens: a track never exceeds its container,
+     so the page itself can never grow a horizontal scrollbar */
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
   gap: 0.9rem;
 }
 
 .stat {
+  /* the tile is the sizing context for its value (see .stat__value) */
+  container-type: inline-size;
   text-align: center;
   padding: 0.85rem 0.5rem 0.7rem;
   border: 1px solid rgba(138, 106, 47, 0.4);
@@ -291,6 +295,20 @@
   display: block;
   font-size: 1.25rem;
   color: #6b4a15;
+  /* dates and play time must not wrap mid-value (an orphaned «г.» on its own
+     line breaks the tile); fitting is handled by the container-query rule
+     below instead of wrapping */
+  white-space: nowrap;
+}
+
+/* Long values (RU dates, exact played time) must fit the tile at every
+   width: the type scales with the tile's own inline size, so narrow
+   two/three-column grids get proportionally smaller text instead of an
+   overflow. Browsers without container queries keep the fixed size above. */
+@supports (container-type: inline-size) {
+  .stat__value {
+    font-size: clamp(0.9rem, 10cqw, 1.25rem);
+  }
 }
 
 .stat__label {
@@ -333,6 +351,17 @@
   line-height: 1.55;
   text-align: center;
   color: #7c6647;
+}
+
+/* one-line provenance note for the introduction's death counter */
+.archive__counter-note {
+  margin: 1.4rem auto 0;
+  max-width: 64ch;
+  font-size: 0.78rem;
+  font-style: italic;
+  line-height: 1.5;
+  text-align: center;
+  color: #8a7a5c;
 }
 
 .professions {

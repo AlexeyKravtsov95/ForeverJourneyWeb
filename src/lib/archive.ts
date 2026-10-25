@@ -7,7 +7,7 @@
 // counts, and the snapshot is always labeled as historical. Zone names,
 // profession names and numbers are shown exactly as the addon saved them.
 import type { Journal } from './journal'
-import { formatDate, formatPlayed } from './format'
+import { formatDate, formatPlayedExact } from './format'
 import type { Lang, Strings } from '../i18n'
 
 export interface ArchiveStatView {
@@ -45,17 +45,21 @@ export interface ArchiveView {
     title: string
     items: ArchiveZoneView[]
   } | null
-  savedStats: {
-    title: string
-    stats: ArchiveStatView[]
-  } | null
+  /**
+   * One-line provenance note for the death total shown in the introduction:
+   * present only when the file declared its own counter (the chronicle's
+   * DEATH events are a subset of it, never the source of the number).
+   */
+  counterNote: string | null
 }
 
 /**
  * Builds the archive view for a journal, or null when there is nothing to
  * show (FJBOOK1 imports and SavedVariables files without archive data render
  * no section at all). Zones are sorted chronologically with an explicit ru
- * collation tiebreak so the order is deterministic on every runner.
+ * collation tiebreak so the order is deterministic on every runner. The
+ * overall deaths/memories counters are deliberately not repeated here — the
+ * introduction already shows them; only their provenance is explained.
  */
 export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): ArchiveView | null {
   const archive = journal.archive
@@ -70,7 +74,9 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
     snapshotStats.push({ label: tr.statQuests, value: String(recovered.completedQuests) })
   }
   if (recovered?.playedTotal !== undefined) {
-    snapshotStats.push({ label: tr.statPlayed, value: formatPlayed(recovered.playedTotal, lang) })
+    // exact to the second — this is a historical value, not a live stat to skim
+    const played = formatPlayedExact(recovered.playedTotal, lang)
+    if (played) snapshotStats.push({ label: tr.statPlayed, value: played })
   }
   if (recovered?.capturedAt !== undefined) {
     snapshotStats.push({
@@ -113,13 +119,11 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
       firstSeen: zone.firstSeenAt !== undefined ? formatDate(zone.firstSeenAt, lang) : '',
     }))
 
-  // The saved death counter is the addon's own stats.deaths — it is shown only
-  // when the file actually declared it, never the event-count fallback.
-  const savedStats: ArchiveStatView[] = []
-  if (archive.deathsCounter !== undefined) {
-    savedStats.push({ label: tr.archiveStatDeathsSaved, value: String(archive.deathsCounter) })
+  // A declared counter alone is not archive content — it belongs to the
+  // introduction; without snapshot, professions or zones there is no page.
+  if (snapshotStats.length === 0 && professions.length === 0 && zones.length === 0) {
+    return null
   }
-  savedStats.push({ label: tr.archiveStatMemories, value: String(journal.memories.length) })
 
   return {
     title: tr.archiveTitle,
@@ -130,7 +134,9 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
     professions:
       professions.length > 0 ? { title: tr.archiveProfessionsTitle, items: professions } : null,
     zones: zones.length > 0 ? { title: tr.archiveZonesTitle, items: zones } : null,
-    savedStats:
-      savedStats.length > 0 ? { title: tr.archiveSavedStatsTitle, stats: savedStats } : null,
+    // shown only when the addon's own death counter exists in the file, so the
+    // reader can tell it apart from the (smaller) number of DEATH memories
+    counterNote:
+      archive.deathsCounter !== undefined ? tr.archiveDeathsSourceNote : null,
   }
 }
