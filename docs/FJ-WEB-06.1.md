@@ -85,16 +85,42 @@ UTC+7 локально): таймстампы фикстуры в середин
 RU/EN PDF из санитизированной фикстуры отрендерены в изображения
 (pypdfium2) и прошли независимый визуальный гейт (10/10 страниц): рамки,
 поля, переносы, шкалы профессий (63/61/33 %), точное время в карточке,
-одна дата на обложке. Веб-скриншоты архива пересняты в обоих языках;
-плитки значений получили `white-space: nowrap` (одиночное «г.» больше не
-переносится).
+одна дата на обложке. Веб-скриншоты архива пересняты в обоих языках.
+
+## Финальный адаптивный фикс (ревью PR #11)
+
+`white-space: nowrap` у плиток значений конфликтовал с сеткой
+`repeat(auto-fit, minmax(140px, 1fr))`: на 375–620 px (2–3 колонки, плитка
+142–169 px) значения «2 д 3 ч 2 мин 34 с» и «10 октября 2026 г.» вылезали
+за рамку на 3–30 px, на 1280 px — на 2 px (замеры `scrollWidth − clientWidth`
+в Chrome, девайс-режим). Форматтеры, парсер и PDF не менялись; исправлена
+только типографика:
+
+- `.stat { container-type: inline-size }` — плитка становится контекстом.
+- `@supports (container-type: inline-size) { .stat__value { font-size:
+  clamp(0.9rem, 10cqw, 1.25rem) } }` — кегль масштабируется шириной самой
+  плитки (floor 0.9rem, потолок 1.25rem), значения остаются в одну строку
+  без обрезания; браузеры без container queries получают прежний
+  фиксированный кегль (graceful degradation).
+- `minmax(min(140px, 100%), 1fr)` — трек никогда не шире контейнера, т.е.
+  горизонтального скролла страницы не возникает и на экстремально узких
+  экранах.
+
+Замеры после фикса — 0 px переполнения на всех широтах 320/375/390/430/620/
+1280 в обоих языках, `document.scrollWidth == clientWidth` везде. Мобильные
+скриншоты архива (390 px): `docs/screenshots/archive-mobile-{ru,en}.png`,
+визуальный гейт 2/2 pass. Регрессия закреплена контрактом
+`src/styles/book.css.test.ts` (jsdom не считает layout — правила пинируются
+на уровне CSS, подтверждённого браузерными замерами).
 
 ## Образцы
 
 - PDF: `docs/pdf-samples/archive-straider-ru.pdf` (5 страниц),
   `docs/pdf-samples/archive-straider-en.pdf` (5 страниц) — перегенерированы
   (`npm run pdf:samples`); остальные образцы контентно не менялись.
-- Веб: `docs/screenshots/archive-web-ru.png`, `docs/screenshots/archive-web-en.png`.
+- Веб: `docs/screenshots/archive-web-ru.png`, `docs/screenshots/archive-web-en.png`,
+  мобильные (390 px): `docs/screenshots/archive-mobile-ru.png`,
+  `docs/screenshots/archive-mobile-en.png`.
 
 ## Известные ограничения
 
