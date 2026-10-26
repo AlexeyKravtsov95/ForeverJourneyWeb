@@ -58,7 +58,7 @@ const journalWithArchive = (archive: Journal['archive']): Journal => ({
 
 describe('BookDocument pages (FJ-WEB-06.1)', () => {
   it.each(['ru', 'en'] as const)(
-    'Straider (7 memories, one calendar day): 5 pages, no Saved Statistics page (%s)',
+    'Straider (7 memories, one calendar day): 6 pages, archive spans two, no Saved Statistics page (%s)',
     async (lang) => {
       const pages = await renderPages(
         svJournal('ForeverJourney-straider.lua', 'ClassicBetaPvP:Straider'),
@@ -66,8 +66,9 @@ describe('BookDocument pages (FJ-WEB-06.1)', () => {
       )
       const tr = strings[lang]
 
-      // cover + intro + archive + the single October chapter + end page
-      expect(pages).toHaveLength(5)
+      // cover + intro + two archive pages (snapshot/economy/registry, then
+      // professions/zones) + the single October chapter + end page
+      expect(pages).toHaveLength(6)
 
       // cover: the name and ONE date — a same-day journey never renders
       // "10 октября 2026 г. — 10 октября 2026 г." twice-over
@@ -82,26 +83,52 @@ describe('BookDocument pages (FJ-WEB-06.1)', () => {
       expect(pdfPageContains(pages[1], tr.statMemories)).toBe(true)
       expect(pdfPageContains(pages[1], '7')).toBe(true)
 
-      // archive keeps every saved value: snapshot to the second, professions,
-      // zones, and the provenance note for the death counter
+      // first archive page: the snapshot (with the exact time at the recorded
+      // level), the four economy figures, and the quest registry summary
       expect(pdfPageContains(pages[2], tr.archiveTitle)).toBe(true)
       expect(pdfPageContains(pages[2], tr.archiveSnapshotTitle)).toBe(true)
       expect(pdfPageContains(pages[2], '25')).toBe(true)
-      expect(pdfPageContains(pages[2], '182')).toBe(true)
       expect(
         pdfPageContains(pages[2], lang === 'ru' ? '2 д 3 ч 2 мин 34 с' : '2d 3h 2m 34s')
       ).toBe(true)
-      expect(pdfPageContains(pages[2], tr.archiveProfessionsTitle)).toBe(true)
-      expect(pdfPageContains(pages[2], '94 / 150')).toBe(true)
-      expect(pdfPageContains(pages[2], 'Горное дело')).toBe(true)
-      expect(pdfPageContains(pages[2], tr.archiveZonesTitle)).toBe(true)
-      expect(pdfPageContains(pages[2], 'Оргриммар')).toBe(true)
-      expect(pdfPageContains(pages[2], tr.archiveDeathsSourceNote)).toBe(true)
+      expect(
+        pdfPageContains(pages[2], lang === 'ru' ? '3 ч 17 мин 7 с' : '3h 17m 7s')
+      ).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archivePlayedAtLevel)).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveEconomyTitle)).toBe(true)
+      expect(pdfPageContains(pages[2], '9g 61s 79c')).toBe(true)
+      expect(pdfPageContains(pages[2], '9g 7s 20c')).toBe(true)
+      expect(pdfPageContains(pages[2], '28s 33c')).toBe(true)
+      expect(pdfPageContains(pages[2], '82s 92c')).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveEconomySnapshotBalance)).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveEconomyLastBalance)).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveEconomyGains)).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveEconomySpending)).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveEconomyNote)).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveQuestsTitle)).toBe(true)
+      expect(pdfPageContains(pages[2], '182')).toBe(true)
+      expect(pdfPageContains(pages[2], '209')).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveQuestCounter)).toBe(true)
+      expect(pdfPageContains(pages[2], tr.archiveQuestIdsCount)).toBe(true)
+      // the counter/ID disagreement is spelled out, exactly once
+      expect(pdfPageContains(pages[2], tr.archiveQuestMismatchNote)).toBe(true)
+      // the raw IDs themselves are NOT printed — the web view and the CSV own them
+      expect(pdfPageContains(pages[2], '235')).toBe(false)
+      expect(pdfPageContains(pages[2], '264')).toBe(false)
+
+      // second archive page: professions, zones and the counter note — a
+      // follow-up page with real content, not a near-empty overflow
+      expect(pdfPageContains(pages[3], tr.archiveProfessionsTitle)).toBe(true)
+      expect(pdfPageContains(pages[3], '94 / 150')).toBe(true)
+      expect(pdfPageContains(pages[3], 'Горное дело')).toBe(true)
+      expect(pdfPageContains(pages[3], tr.archiveZonesTitle)).toBe(true)
+      expect(pdfPageContains(pages[3], 'Оргриммар')).toBe(true)
+      expect(pdfPageContains(pages[3], tr.archiveDeathsSourceNote)).toBe(true)
 
       // the chronicle chapter keeps its memories; the book ends in one page
-      expect(pdfPageContains(pages[3], lang === 'ru' ? 'октября 2026' : 'October 2026')).toBe(true)
-      expect(pdfPageContains(pages[3], 'Dun Morogh')).toBe(true)
-      expect(pdfPageContains(pages[4], tr.endTitle)).toBe(true)
+      expect(pdfPageContains(pages[4], lang === 'ru' ? 'октября 2026' : 'October 2026')).toBe(true)
+      expect(pdfPageContains(pages[4], 'Dun Morogh')).toBe(true)
+      expect(pdfPageContains(pages[5], tr.endTitle)).toBe(true)
 
       // the duplicate Saved Statistics page is gone — in either language,
       // on any page

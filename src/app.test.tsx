@@ -393,11 +393,39 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     expect(html).toContain(
       'Исторический снимок из SavedVariables. Значения могут не соответствовать последнему состоянию персонажа.'
     )
-    // snapshot: level 25, 182 quests, 183754 s exactly to the second, snapshot date
+    // snapshot: level 25, both play times exact to the second, snapshot date;
+    // the quest counter moved to the Quest Registry and is not repeated here
     expect(html).toContain('25')
-    expect(html).toContain('182')
     expect(html).toContain('2 д 3 ч 2 мин 34 с')
+    expect(html).toContain('3 ч 17 мин 7 с')
+    expect(html).toContain('Время игры на уровне')
     expect(html).toContain('Дата снимка')
+    // economy: the four saved figures with provenance labels and the disclaimer
+    expect(html).toContain('Экономика')
+    expect(html).toContain('9g 61s 79c')
+    expect(html).toContain('9g 7s 20c')
+    expect(html).toContain('28s 33c')
+    expect(html).toContain('82s 92c')
+    expect(html).toContain('Баланс на момент снимка')
+    expect(html).toContain('Последний сохранённый баланс')
+    expect(html).toContain('Учтённые поступления')
+    expect(html).toContain('Учтённые расходы')
+    expect(html).toContain('могут не отражать окончательное состояние')
+    // quest registry: both saved values with the neutral mismatch note
+    expect(html).toContain('Реестр заданий')
+    expect(html).toContain('182')
+    expect(html).toContain('209')
+    expect(html).toContain('Сохранённый счётчик заданий')
+    expect(html).toContain('Сохранённых ID заданий')
+    expect(html).toContain(
+      'Счётчик заданий и количество сохранённых ID различаются в исходном файле. Данные показаны без изменений.'
+    )
+    expect(html).toContain('Названия заданий в файле не сохраняются')
+    // the ID list sits inside a collapsible block, all 209 of them
+    expect(html).toContain('<details class="quests__details">')
+    expect(html).toContain('Сохранённые ID заданий (209)')
+    expect((html.match(/class="quests__id"/g) ?? []).length).toBe(209)
+    expect(html).toContain('Скачать CSV')
     // professions with saved skill/maximum pairs (no invented skills)
     expect(html).toContain('Профессии')
     expect(html).toContain('Горное дело')
@@ -438,6 +466,22 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     expect(html).toContain(
       'Historical snapshot from SavedVariables. These values may not represent the character\u2019s final state.'
     )
+    expect(html).toContain('3h 17m 7s')
+    expect(html).toContain('Time played at recorded level')
+    expect(html).toContain('Economy')
+    expect(html).toContain('Balance at snapshot')
+    expect(html).toContain('Last recorded balance')
+    expect(html).toContain('Tracked gains')
+    expect(html).toContain('Tracked spending')
+    expect(html).toContain('Saved by the addon')
+    expect(html).toContain('Quest Registry')
+    expect(html).toContain('Saved quest counter')
+    expect(html).toContain('Saved quest IDs')
+    expect(html).toContain(
+      'The saved quest counter and the number of recorded IDs differ in the source file. Both values are preserved as recorded.'
+    )
+    expect(html).toContain('Saved quest IDs (209)')
+    expect(html).toContain('Download CSV')
     expect(html).toContain('Professions')
     expect(html).toContain('Explored Locations')
     expect(html).not.toContain('Saved Statistics')
@@ -446,6 +490,55 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     )
     expect(html).toContain('2d 3h 2m 34s')
     expect(html).toContain('94 / 150')
+  })
+
+  it('different characters keep separate registries: Testpilot shows its own values only', () => {
+    const lua = readFileSync(
+      new URL('../fixtures/savedvariables/ForeverJourney-straider.lua', import.meta.url),
+      'utf8'
+    )
+    const sv = readSavedVariables(lua)
+    if (sv.status !== 'ok') throw new Error('straider fixture must parse')
+    const journal = buildJournalFromSavedVariables(sv, 'ClassicBetaPvP:Testpilot')
+    if (!journal) throw new Error('journal must build')
+    const html = renderToString(
+      <Book
+        tr={strings.ru}
+        lang="ru"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={journal}
+        meta={{ kind: 'savedvariables' as const, schema: 3, memories: 1, archive: true }}
+      />
+    )
+    // Testpilot's registry: its own 3 IDs and its mismatch note
+    expect(html).toContain('12')
+    expect(html).toContain('Сохранённых ID заданий')
+    expect((html.match(/class="quests__id"/g) ?? []).length).toBe(3)
+    expect(html).toContain('7')
+    expect(html).toContain('11')
+    expect(html).toContain('13')
+    // its economy carries no snapshot balance — only the tracked values
+    expect(html).toContain('12s 34c') // 1234 copper
+    expect(html).not.toContain('Баланс на момент снимка')
+    expect(html).toContain('5s') // 500 earned
+    expect(html).toContain('1s') // 100 spent
+    // Straider's figures must not leak into Testpilot's book
+    expect(html).not.toContain('9g 61s 79c')
+    expect(html).not.toContain('Сохранённые ID заданий (209)')
+  })
+
+  it('the quest registry CSV is built locally from the journal only, with no network', async () => {
+    // buildQuestRegistryCsv is the exact string the download button saves:
+    // valid IDs only, one column, no other characters' data, no names
+    const { buildQuestRegistryCsv } = await import('./lib/archive')
+    const journal = straiderJournal()
+    const ids = journal.archive?.recovered?.questIDs ?? []
+    expect(ids).toHaveLength(209)
+    const csv = buildQuestRegistryCsv(ids)
+    expect(csv.split('\n').filter(Boolean)).toEqual(['quest_id', ...ids.map(String)])
+    // the character name never rides along in the data payload
+    expect(csv).not.toContain('Straider')
   })
 
   it('shows no archive section for FJBOOK1 journals (demo keeps working)', () => {

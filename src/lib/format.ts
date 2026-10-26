@@ -139,3 +139,30 @@ export function toRoman(value: number): string {
   }
   return out
 }
+
+/**
+ * Formats a copper amount in the game's denominations — 10 000 copper = 1
+ * gold, 100 copper = 1 silver ("96179" → "9g 61s 79c", "2833" → "28s 33c").
+ * These are game denominations, not a real currency. Zero denominations are
+ * never shown; a valid zero renders as "0c". Invalid input (NaN, negative,
+ * fractional, non-number, beyond the safe integer range) renders as "" so
+ * the caller hides the value instead of dressing it up.
+ */
+export function formatMoney(copper: number): string {
+  if (
+    typeof copper !== 'number' ||
+    !Number.isFinite(copper) ||
+    copper < 0 ||
+    !Number.isSafeInteger(copper)
+  ) {
+    return ''
+  }
+  const gold = Math.floor(copper / 10_000)
+  const silver = Math.floor((copper % 10_000) / 100)
+  const coins = copper % 100
+  const parts: string[] = []
+  if (gold) parts.push(`${gold}g`)
+  if (silver) parts.push(`${silver}s`)
+  if (coins || parts.length === 0) parts.push(`${coins}c`)
+  return parts.join(' ')
+}

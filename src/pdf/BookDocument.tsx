@@ -191,6 +191,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 26,
     marginTop: 6,
   },
+  // the quest counter/ID mismatch note — a plain italic line, lighter than
+  // the framed archiveNote disclaimers
+  questNote: {
+    fontFamily: BOOK_FONT,
+    fontSize: 8.4,
+    fontStyle: 'italic',
+    color: '#8a7a5c',
+    textAlign: 'center',
+    lineHeight: 1.5,
+    marginHorizontal: 40,
+    marginTop: 6,
+  },
   profession: { marginBottom: 10 },
   professionHead: {
     flexDirection: 'row',
@@ -469,10 +481,12 @@ function Introduction({ journal, tr, lang }: BookDocumentProps) {
   )
 }
 
-// The Character Archive page (FJ-WEB-06): the SavedVariables-only section
-// between the introduction and the chapters. Rendered from the same shared
-// view model as the web preview (src/lib/archive.ts), so data and wording can
-// never drift. Sections appear only when the file actually carried them.
+// The Character Archive page (FJ-WEB-06 + FJ-WEB-07): the SavedVariables-only
+// section between the introduction and the chapters. Rendered from the same
+// shared view model as the web preview (src/lib/archive.ts), so data and
+// wording can never drift. Sections appear only when the file actually
+// carried them. The quest registry prints its compact summary only — the
+// full ID list lives in the web view and the CSV download.
 function ArchivePage({ journal, tr, lang }: BookDocumentProps) {
   const view: ArchiveView | null = buildArchiveView(journal, tr, lang)
   if (!view) return null
@@ -498,6 +512,49 @@ function ArchivePage({ journal, tr, lang }: BookDocumentProps) {
             ))}
           </View>
           <Text style={styles.archiveNote}>{view.snapshot.note}</Text>
+        </View>
+      ) : null}
+
+      {view.economy ? (
+        <View style={styles.archiveBlock} minPresenceAhead={120}>
+          <Text style={styles.archiveSubtitle}>{view.economy.title.toUpperCase()}</Text>
+          <View style={styles.stats}>
+            {view.economy.rows.map((row) => (
+              <View style={styles.stat} key={row.label}>
+                <Text style={styles.statValue}>{row.value}</Text>
+                <Text style={styles.statLabel}>{row.label.toUpperCase()}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.archiveNote}>{view.economy.note}</Text>
+        </View>
+      ) : null}
+
+      {view.quests ? (
+        <View style={styles.archiveBlock} minPresenceAhead={120}>
+          <Text style={styles.archiveSubtitle}>{view.quests.title.toUpperCase()}</Text>
+          <View style={styles.stats}>
+            {view.quests.counter ? (
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>{view.quests.counter.value}</Text>
+                <Text style={styles.statLabel}>
+                  {view.quests.counter.label.toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
+            {view.quests.savedIds ? (
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>{view.quests.savedIds.value}</Text>
+                <Text style={styles.statLabel}>
+                  {view.quests.savedIds.label.toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.questNote}>{view.quests.note}</Text>
+          {view.quests.mismatchNote ? (
+            <Text style={styles.questNote}>{view.quests.mismatchNote}</Text>
+          ) : null}
         </View>
       ) : null}
 

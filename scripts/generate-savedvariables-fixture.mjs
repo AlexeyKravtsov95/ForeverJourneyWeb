@@ -297,6 +297,10 @@ const brokenLua = [
 // FJ-WEB-06.1: the beta character was played in a single session, so every
 // Straider timestamp is a different time inside one calendar day (2026-10-10
 // UTC) — the cover must show one date, not a same-day range.
+// FJ-WEB-07: the snapshot also carries the economy and quest registry data of
+// the real file — money balances (96179 copper at the snapshot, 90720 last
+// recorded with 2833/8292 tracked earned/spent), 11827 s played at level 25,
+// and 209 unique quest IDs against the saved counter of 182.
 // ---------------------------------------------------------------------------
 const day = (hour, minute = 0) => Math.floor(Date.UTC(2026, 9, 10, hour, minute) / 1000)
 const later = (month, dayOfMonth) => Math.floor(Date.UTC(2026, month, dayOfMonth) / 1000)
@@ -367,6 +371,12 @@ const straiderVisitedZones = {
   1454: { name: 'Оргриммар', firstSeenAt: zoneSeen(4025) },
 }
 
+// 209 unique positive quest IDs, deterministic: the four IDs of the task
+// contract's structural example, then a non-colliding arithmetic run
+// (300..912 step 3 → 205 values; 4 + 205 = 209). The saved counter stays 182
+// on purpose — the real file disagrees with itself and both values are kept.
+const straiderQuestIds = [8, 25, 235, 264, ...Array.from({ length: 205 }, (_, i) => 300 + i * 3)]
+
 const straiderDb = {
   schemaVersion: 3,
   addonVersion: '0.9.8',
@@ -379,14 +389,16 @@ const straiderDb = {
         capturedAt: day(5, 35),
         level: 25,
         completedQuests: {
+          // the real file: the saved counter (182) and the number of unique
+          // saved IDs (209) legitimately differ — both values are preserved;
+          // raw quest IDs must never become extra memories on the site
           count: 182,
-          // raw quest IDs are preserved by the addon but must never become
-          // extra memories on the site
-          questIDs: indexed([312, 314, 319, 320, 337, 341, 364, 371, 386, 393, 402, 419]),
+          questIDs: indexed(straiderQuestIds),
         },
+        money: { current: 96179 },
         played: {
           total: 183754,
-          currentLevel: 43210, // play time at the current level, NOT a level
+          currentLevel: 11827, // play time at the recorded level, NOT a level
         },
         professions: indexed([
           { name: 'Горное дело', skillLevel: 94, maxSkillLevel: 150 },
@@ -394,10 +406,16 @@ const straiderDb = {
           { name: 'Кулинария', skillLevel: 25, maxSkillLevel: 75 },
         ]),
       },
+      // money tracked by the addon outside the snapshot — earned/spent are the
+      // registered balance changes, current is the last saved balance
+      money: { earned: 2833, current: 90720, spent: 8292 },
       visitedZones: straiderVisitedZones,
       memories: indexed(straiderMemories),
     },
-    // second synthetic character: archives of different characters never mix
+    // second synthetic character: archives of different characters never mix;
+    // its snapshot carries no money, so its Economy shows the three tracked
+    // values without a snapshot balance, and its registry shows the mismatch
+    // note (counter 12 vs 3 saved IDs)
     'ClassicBetaPvP:Testpilot': {
       createdAt: later(6, 14),
       stats: { deaths: 2 },
@@ -405,10 +423,11 @@ const straiderDb = {
         initialized: true,
         capturedAt: later(6, 14),
         level: 10,
-        completedQuests: { count: 12 },
-        played: { total: 3600 },
+        completedQuests: { count: 12, questIDs: indexed([7, 11, 13]) },
+        played: { total: 3600, currentLevel: 1800 },
         professions: indexed([{ name: 'Кожевничество', skillLevel: 45, maxSkillLevel: 75 }]),
       },
+      money: { earned: 500, current: 1234, spent: 100 },
       visitedZones: { 'Дун Морог': later(6, 14) },
       memories: indexed([
         memory({

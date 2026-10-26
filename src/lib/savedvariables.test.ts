@@ -527,15 +527,24 @@ describe('character archive (FJ-WEB-06)', () => {
     expect(journal.journey.deaths).toBe(24)
     expect(journal.archive?.deathsCounter).toBe(24)
 
-    // snapshot values exactly as archived; currentLevel (43210 s at level) is
-    // play time at the current level and never becomes the character level
-    expect(journal.archive?.recovered).toEqual({
-      capturedAt: Math.floor(Date.UTC(2026, 9, 10, 5, 35) / 1000) * 1000,
-      completedQuests: 182,
-      playedTotal: 183_754,
-      level: 25,
-    })
+    // snapshot values exactly as archived; currentLevel (11827 s at level) is
+    // play time at the current level and never becomes the character level;
+    // questIDs (209 unique) and the snapshot money balance ride along
+    expect(journal.archive?.recovered?.capturedAt).toBe(
+      Math.floor(Date.UTC(2026, 9, 10, 5, 35) / 1000) * 1000
+    )
+    expect(journal.archive?.recovered?.completedQuests).toBe(182)
+    expect(journal.archive?.recovered?.playedTotal).toBe(183_754)
+    expect(journal.archive?.recovered?.playedCurrentLevel).toBe(11_827)
+    expect(journal.archive?.recovered?.level).toBe(25)
+    expect(journal.archive?.recovered?.moneyBalance).toBe(96_179)
+    expect(journal.archive?.recovered?.questIDs).toHaveLength(209)
+    expect(journal.archive?.recovered?.questIDs?.slice(0, 4)).toEqual([8, 25, 235, 264])
+    expect(new Set(journal.archive?.recovered?.questIDs ?? []).size).toBe(209)
     expect(journal.character.level).toBe(0) // no live level in SavedVariables
+
+    // tracked money is kept outside the snapshot, exactly as saved
+    expect(journal.archive?.money).toEqual({ earned: 2_833, current: 90_720, spent: 8_292 })
 
     // three professions with saved skill and maximum
     expect(journal.archive?.professions).toEqual([
@@ -586,9 +595,13 @@ describe('character archive (FJ-WEB-06)', () => {
     expect(journal.archive?.recovered).toEqual({
       capturedAt: Math.floor(Date.UTC(2026, 6, 14) / 1000) * 1000,
       completedQuests: 12,
+      questIDs: [7, 11, 13],
       playedTotal: 3600,
+      playedCurrentLevel: 1800,
       level: 10,
     })
+    // Testpilot's own tracked money — never Straider's figures
+    expect(journal.archive?.money).toEqual({ earned: 500, current: 1234, spent: 100 })
     expect(journal.archive?.professions).toEqual([
       { name: 'Кожевничество', skillLevel: 45, maxSkillLevel: 75 },
     ])
@@ -781,6 +794,160 @@ describe('character archive (FJ-WEB-06)', () => {
     const mixed = source.replace('["level"] = 0,', '["level"] = 42,')
     const mixedJournal = buildJournalFromSavedVariables(mustRead(mixed), 'R:N')
     expect(mixedJournal?.archive?.recovered).toEqual({ level: 42 })
+  })
+})
+
+describe('economy & quest registry import (FJ-WEB-07)', () => {
+  const characterLua = (body: string) =>
+    [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:N"] = {',
+      ...body.split('\n').map((line) => `\t\t\t${line}`),
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+
+  it('keeps the snapshot balance and the tracked money apart, with valid zeros', () => {
+    const journal = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          [
+            '["recoveredHistory"] = { ["initialized"] = true,',
+            '\t["money"] = { ["current"] = 12345 },',
+            '\t["completedQuests"] = { ["count"] = 5 } },',
+            '["money"] = { ["earned"] = 0, ["current"] = 23456, ["spent"] = 0 },',
+          ].join('\n')
+        )
+      ),
+      'R:N'
+    )
+    // 12345 ≠ 23456: the two balances are different saved values, never merged
+    expect(journal?.archive?.recovered?.moneyBalance).toBe(12_345)
+    expect(journal?.archive?.money).toEqual({ earned: 0, current: 23_456, spent: 0 })
+    // a valid zero is kept as a real value, not turned into "unknown"
+    expect(journal?.archive?.money?.earned).toBe(0)
+  })
+
+  it('drops invalid money numbers instead of zeroing or flooring them', () => {
+    const journal = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          [
+            '["money"] = {',
+            '\t["earned"] = -100,',
+            '\t["current"] = 90.5,',
+            '\t["spent"] = "many",',
+            '\t},',
+            '["recoveredHistory"] = { ["initialized"] = true,',
+            '\t["money"] = { ["current"] = 90.5 } },',
+          ].join('\n')
+        )
+      ),
+      'R:N'
+    )
+    // negative, fractional and string values all vanish
+    expect(journal?.archive?.money).toBeUndefined()
+    expect(journal?.archive?.recovered?.moneyBalance).toBeUndefined()
+    // a partial record keeps only its valid fields
+    const partial = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua('["money"] = { ["current"] = 500, ["earned"] = -1, ["spent"] = 2.5 }')
+      ),
+      'R:N'
+    )
+    expect(partial?.archive?.money).toEqual({ current: 500 })
+    // an empty money table is not a money record at all
+    const empty = buildJournalFromSavedVariables(
+      mustRead(characterLua('["money"] = { }')),
+      'R:N'
+    )
+    expect(empty?.archive).toBeUndefined()
+    // infinities never even reach the model: the safe parser rejects the literal
+    expect(
+      readSavedVariables(characterLua('["money"] = { ["current"] = 1e999 }')).status
+    ).toBe('error')
+  })
+
+  it('caps an absurdly large money amount at the game limit (10 million gold)', () => {
+    const journal = buildJournalFromSavedVariables(
+      mustRead(characterLua('["money"] = { ["current"] = 999999999999999999 }')),
+      'R:N'
+    )
+    expect(journal?.archive?.money?.current).toBe(100_000_000_000_000)
+  })
+
+  it('an uninitialized snapshot hides its money; tracked money is independent of the snapshot', () => {
+    const journal = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          [
+            '["recoveredHistory"] = { ["initialized"] = false,',
+            '\t["money"] = { ["current"] = 777 },',
+            '\t["completedQuests"] = { ["count"] = 900, ["questIDs"] = { 1, 2 } },',
+            '\t["played"] = { ["total"] = 100, ["currentLevel"] = 50 } },',
+            '["money"] = { ["current"] = 777 },',
+          ].join('\n')
+        )
+      ),
+      'R:N'
+    )
+    // snapshot data (money, counter, IDs, play times) is not trusted…
+    expect(journal?.archive?.recovered).toBeUndefined()
+    // …but the addon's tracked money outside the snapshot survives on its own
+    expect(journal?.archive?.money).toEqual({ current: 777 })
+  })
+
+  it('quest IDs: only positive integers survive, duplicates keep first order, junk is skipped', () => {
+    const journal = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          [
+            '["recoveredHistory"] = { ["initialized"] = true,',
+            '\t["completedQuests"] = { ["count"] = 7, ["questIDs"] = {',
+            '\t\t25, 8, 25.5, 0, -3, "junk", 8, 235, 25, 10000001, 264,',
+            '\t} } },',
+          ].join('\n')
+        )
+      ),
+      'R:N'
+    )
+    // documented policy: valid = positive integer ≤ 10⁷; duplicates collapse
+    // to the first occurrence in file order; everything else is dropped
+    expect(journal?.archive?.recovered?.questIDs).toEqual([25, 8, 235, 264])
+    expect(journal?.archive?.recovered?.completedQuests).toBe(7) // both kept as-is
+  })
+
+  it('the quest ID list is capped like every archive list (20 000 entries)', () => {
+    const ids = Array.from({ length: 20_001 }, (_, i) => i + 1)
+    const luaIds = `{ ${ids.join(', ')} }`
+    const journal = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          `["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 1, ["questIDs"] = ${luaIds} } }`
+        )
+      ),
+      'R:N'
+    )
+    expect(journal?.archive?.recovered?.questIDs).toHaveLength(20_000)
+    expect(journal?.archive?.recovered?.questIDs?.[0]).toBe(1)
+    expect(journal?.archive?.recovered?.questIDs?.[19_999]).toBe(20_000)
+  })
+
+  it('played.currentLevel is a duration in seconds, distinct from played.total', () => {
+    const journal = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["played"] = { ["total"] = 183754, ["currentLevel"] = 11827 } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(journal?.archive?.recovered?.playedTotal).toBe(183_754)
+    expect(journal?.archive?.recovered?.playedCurrentLevel).toBe(11_827)
+    expect(journal?.character.level).toBe(0) // never promoted to a level
   })
 })
 

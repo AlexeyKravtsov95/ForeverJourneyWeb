@@ -78,6 +78,26 @@ export interface Strings {
   archiveSnapshotTitle: string
   archiveSnapshotNote: string
   archiveSnapshotDate: string
+  /** Play time at the recorded level (snapshot played.currentLevel). */
+  archivePlayedAtLevel: string
+  archiveEconomyTitle: string
+  /** Saved-by-the-addon disclaimer for the money figures. */
+  archiveEconomyNote: string
+  archiveEconomySnapshotBalance: string
+  archiveEconomyLastBalance: string
+  archiveEconomyGains: string
+  archiveEconomySpending: string
+  archiveQuestsTitle: string
+  /** Names are not part of the file — only the counter and raw IDs are shown. */
+  archiveQuestsNote: string
+  archiveQuestCounter: string
+  archiveQuestIdsCount: string
+  /** Shown only when the saved counter and the number of IDs disagree. */
+  archiveQuestMismatchNote: string
+  /** Collapsible label of the web quest-ID list. */
+  archiveQuestsShowIds: string
+  /** Web CSV download button label. */
+  archiveQuestsCsv: string
   archiveProfessionsTitle: string
   archiveZonesTitle: string
   /** Provenance of the death counter the introduction shows (saved, not counted). */
@@ -197,6 +217,23 @@ export const strings: Record<Lang, Strings> = {
     archiveSnapshotNote:
       'Historical snapshot from SavedVariables. These values may not represent the character\u2019s final state.',
     archiveSnapshotDate: 'Snapshot date',
+    archivePlayedAtLevel: 'Time played at recorded level',
+    archiveEconomyTitle: 'Economy',
+    archiveEconomyNote:
+      'Saved by the addon. These figures may not reflect the character\u2019s final state or the full history of its transactions.',
+    archiveEconomySnapshotBalance: 'Balance at snapshot',
+    archiveEconomyLastBalance: 'Last recorded balance',
+    archiveEconomyGains: 'Tracked gains',
+    archiveEconomySpending: 'Tracked spending',
+    archiveQuestsTitle: 'Quest Registry',
+    archiveQuestsNote:
+      'Quest names are not saved in the file — only the saved counter and the raw quest IDs.',
+    archiveQuestCounter: 'Saved quest counter',
+    archiveQuestIdsCount: 'Saved quest IDs',
+    archiveQuestMismatchNote:
+      'The saved quest counter and the number of recorded IDs differ in the source file. Both values are preserved as recorded.',
+    archiveQuestsShowIds: 'Saved quest IDs',
+    archiveQuestsCsv: 'Download CSV',
     archiveProfessionsTitle: 'Professions',
     archiveZonesTitle: 'Explored Locations',
     archiveDeathsSourceNote:
@@ -310,6 +347,23 @@ export const strings: Record<Lang, Strings> = {
     archiveSnapshotNote:
       'Исторический снимок из SavedVariables. Значения могут не соответствовать последнему состоянию персонажа.',
     archiveSnapshotDate: 'Дата снимка',
+    archivePlayedAtLevel: 'Время игры на уровне',
+    archiveEconomyTitle: 'Экономика',
+    archiveEconomyNote:
+      'Сохранено аддоном. Эти показатели могут не отражать окончательное состояние персонажа или полную историю операций.',
+    archiveEconomySnapshotBalance: 'Баланс на момент снимка',
+    archiveEconomyLastBalance: 'Последний сохранённый баланс',
+    archiveEconomyGains: 'Учтённые поступления',
+    archiveEconomySpending: 'Учтённые расходы',
+    archiveQuestsTitle: 'Реестр заданий',
+    archiveQuestsNote:
+      'Названия заданий в файле не сохраняются — только счётчик и сами ID.',
+    archiveQuestCounter: 'Сохранённый счётчик заданий',
+    archiveQuestIdsCount: 'Сохранённых ID заданий',
+    archiveQuestMismatchNote:
+      'Счётчик заданий и количество сохранённых ID различаются в исходном файле. Данные показаны без изменений.',
+    archiveQuestsShowIds: 'Сохранённые ID заданий',
+    archiveQuestsCsv: 'Скачать CSV',
     archiveProfessionsTitle: 'Профессии',
     archiveZonesTitle: 'Посещённые локации',
     archiveDeathsSourceNote:

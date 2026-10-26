@@ -6,8 +6,13 @@
 // value stays hidden, saved counters are never mixed with chronicle event
 // counts, and the snapshot is always labeled as historical. Zone names,
 // profession names and numbers are shown exactly as the addon saved them.
+//
+// FJ-WEB-07 adds the Economy section (saved money figures in game
+// denominations — no derived "lifetime profit" is ever computed) and the Quest
+// Registry (the saved counter and the saved quest IDs as two separate values;
+// quest names are not in the file and are never invented).
 import type { Journal } from './journal'
-import { formatDate, formatPlayedExact } from './format'
+import { formatDate, formatMoney, formatPlayedExact } from './format'
 import type { Lang, Strings } from '../i18n'
 
 export interface ArchiveStatView {
@@ -29,6 +34,35 @@ export interface ArchiveZoneView {
   firstSeen: string
 }
 
+/** Economy figures — each row appears only when its source value is known. */
+export interface ArchiveEconomyView {
+  title: string
+  /** The "saved by the addon, may not be final" disclaimer. */
+  note: string
+  rows: ArchiveStatView[]
+}
+
+/**
+ * Quest Registry summary. `counter` and `savedIds` are two independent saved
+ * values (they may legitimately differ — both are shown, never reconciled).
+ * `ids` carries the validated IDs for the web-only collapsible list and the
+ * CSV download; the PDF renders the summary alone.
+ */
+export interface ArchiveQuestsView {
+  title: string
+  /** Why the list shows bare numbers: names are not part of the file. */
+  note: string
+  counter: ArchiveStatView | null
+  savedIds: ArchiveStatView | null
+  /** Set only when both values exist and differ — a neutral explanation. */
+  mismatchNote: string | null
+  /** Label of the web collapsible ("Saved quest IDs (209)"). */
+  idsToggle: string
+  /** Label of the web CSV download button. */
+  csvLabel: string
+  ids: number[]
+}
+
 export interface ArchiveView {
   title: string
   snapshot: {
@@ -37,6 +71,8 @@ export interface ArchiveView {
     note: string
     stats: ArchiveStatView[]
   } | null
+  economy: ArchiveEconomyView | null
+  quests: ArchiveQuestsView | null
   professions: {
     title: string
     items: ArchiveProfessionView[]
@@ -51,6 +87,15 @@ export interface ArchiveView {
    * DEATH events are a subset of it, never the source of the number).
    */
   counterNote: string | null
+}
+
+/**
+ * The quest-registry CSV: one `quest_id` column, one row per saved valid ID,
+ * nothing else — no invented quest names, no other characters' data. Built
+ * locally in the browser; downloading it never leaves the machine.
+ */
+export function buildQuestRegistryCsv(ids: readonly number[]): string {
+  return ['quest_id', ...ids.map(String)].join('\n') + '\n'
 }
 
 /**
@@ -70,13 +115,19 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
   if (recovered?.level !== undefined) {
     snapshotStats.push({ label: tr.statLevel, value: String(recovered.level) })
   }
-  if (recovered?.completedQuests !== undefined) {
-    snapshotStats.push({ label: tr.statQuests, value: String(recovered.completedQuests) })
-  }
+  // The quest counter moved to the Quest Registry (FJ-WEB-07): showing the
+  // same saved number twice — as a snapshot tile and as the registry summary —
+  // would duplicate statistics for no reason.
   if (recovered?.playedTotal !== undefined) {
     // exact to the second — this is a historical value, not a live stat to skim
     const played = formatPlayedExact(recovered.playedTotal, lang)
     if (played) snapshotStats.push({ label: tr.statPlayed, value: played })
+  }
+  if (recovered?.playedCurrentLevel !== undefined) {
+    // a distinct figure: time played at the recorded level, not the total and
+    // not the level itself
+    const atLevel = formatPlayedExact(recovered.playedCurrentLevel, lang)
+    if (atLevel) snapshotStats.push({ label: tr.archivePlayedAtLevel, value: atLevel })
   }
   if (recovered?.capturedAt !== undefined) {
     snapshotStats.push({
@@ -84,6 +135,44 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
       value: formatDate(recovered.capturedAt, lang),
     })
   }
+
+  // Economy rows follow the task's table order; the snapshot balance comes
+  // from the (initialized) historical snapshot, the other three from the
+  // addon's tracked money — independent sources, never merged into one figure.
+  const economyRows: ArchiveStatView[] = []
+  if (recovered?.moneyBalance !== undefined) {
+    const formatted = formatMoney(recovered.moneyBalance)
+    if (formatted) economyRows.push({ label: tr.archiveEconomySnapshotBalance, value: formatted })
+  }
+  if (archive.money?.current !== undefined) {
+    const formatted = formatMoney(archive.money.current)
+    if (formatted) economyRows.push({ label: tr.archiveEconomyLastBalance, value: formatted })
+  }
+  if (archive.money?.earned !== undefined) {
+    const formatted = formatMoney(archive.money.earned)
+    if (formatted) economyRows.push({ label: tr.archiveEconomyGains, value: formatted })
+  }
+  if (archive.money?.spent !== undefined) {
+    const formatted = formatMoney(archive.money.spent)
+    if (formatted) economyRows.push({ label: tr.archiveEconomySpending, value: formatted })
+  }
+
+  // Quest Registry exists when either saved value exists; the two numbers are
+  // shown side by side exactly as recorded, with a neutral note when they
+  // disagree (182 vs 209 in the real Straider file).
+  const savedIds = recovered?.questIDs
+  const counter =
+    recovered?.completedQuests !== undefined
+      ? { label: tr.archiveQuestCounter, value: String(recovered.completedQuests) }
+      : null
+  const idCount =
+    savedIds !== undefined && savedIds.length > 0
+      ? { label: tr.archiveQuestIdsCount, value: String(savedIds.length) }
+      : null
+  const mismatch =
+    counter !== null && idCount !== null && counter.value !== idCount.value
+      ? tr.archiveQuestMismatchNote
+      : null
 
   const professions: ArchiveProfessionView[] = archive.professions.map((profession) => {
     const skill =
@@ -121,7 +210,14 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
 
   // A declared counter alone is not archive content — it belongs to the
   // introduction; without snapshot, professions or zones there is no page.
-  if (snapshotStats.length === 0 && professions.length === 0 && zones.length === 0) {
+  if (
+    snapshotStats.length === 0 &&
+    economyRows.length === 0 &&
+    counter === null &&
+    idCount === null &&
+    professions.length === 0 &&
+    zones.length === 0
+  ) {
     return null
   }
 
@@ -130,6 +226,26 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
     snapshot:
       snapshotStats.length > 0
         ? { title: tr.archiveSnapshotTitle, note: tr.archiveSnapshotNote, stats: snapshotStats }
+        : null,
+    economy:
+      economyRows.length > 0
+        ? { title: tr.archiveEconomyTitle, note: tr.archiveEconomyNote, rows: economyRows }
+        : null,
+    quests:
+      counter !== null || idCount !== null
+        ? {
+            title: tr.archiveQuestsTitle,
+            note: tr.archiveQuestsNote,
+            counter,
+            savedIds: idCount,
+            mismatchNote: mismatch,
+            idsToggle:
+              idCount !== null
+                ? `${tr.archiveQuestsShowIds} (${idCount.value})`
+                : tr.archiveQuestsShowIds,
+            csvLabel: tr.archiveQuestsCsv,
+            ids: savedIds ?? [],
+          }
         : null,
     professions:
       professions.length > 0 ? { title: tr.archiveProfessionsTitle, items: professions } : null,
