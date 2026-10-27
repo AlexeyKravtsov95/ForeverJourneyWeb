@@ -3,6 +3,7 @@ import {
   coverDateRange,
   formatDate,
   formatDateRange,
+  formatMoney,
   formatPlayed,
   formatPlayedExact,
   monthLabel,
@@ -186,5 +187,33 @@ describe('coverDateRange (journal → cover, FJ-WEB-06.1)', () => {
     }
     expect(coverDateRange(noMemories, 'ru')).toBe('10 октября 2026 г. — 11 октября 2026 г.')
     expect(coverDateRange({ ...noMemories, journey: {} }, 'en')).toBe('October 11, 2026')
+  })
+})
+
+describe('formatMoney (economy, FJ-WEB-07)', () => {
+  it('converts the four confirmed Straider values exactly', () => {
+    expect(formatMoney(96_179)).toBe('9g 61s 79c')
+    expect(formatMoney(90_720)).toBe('9g 7s 20c')
+    expect(formatMoney(2_833)).toBe('28s 33c')
+    expect(formatMoney(8_292)).toBe('82s 92c')
+  })
+
+  it('never shows zero denominations; a valid zero is 0c', () => {
+    expect(formatMoney(0)).toBe('0c')
+    expect(formatMoney(20)).toBe('20c')
+    expect(formatMoney(3_300)).toBe('33s') // 0g 33s 0c — zeros never shown
+    expect(formatMoney(10_000)).toBe('1g') // exactly one gold
+    expect(formatMoney(90_020)).toBe('9g 20c') // 0s in the middle stays hidden
+    expect(formatMoney(1_000_000)).toBe('100g')
+  })
+
+  it('renders invalid input as an empty string so the caller hides it', () => {
+    expect(formatMoney(Number.NaN)).toBe('')
+    expect(formatMoney(Number.POSITIVE_INFINITY)).toBe('')
+    expect(formatMoney(Number.NEGATIVE_INFINITY)).toBe('')
+    expect(formatMoney(-1)).toBe('')
+    expect(formatMoney(-0.5)).toBe('')
+    expect(formatMoney(96_179.5)).toBe('') // fractional copper never existed
+    expect(formatMoney(Number.MAX_SAFE_INTEGER + 1)).toBe('') // not a safe integer
   })
 })

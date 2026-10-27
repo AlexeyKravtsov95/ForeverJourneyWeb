@@ -438,6 +438,71 @@
   white-space: nowrap;
 }
 
+/* ---------- quest registry (FJ-WEB-07) ---------- */
+
+/* the counter/ID mismatch note is a plain italic line, not another framed box */
+.archive__note--mismatch {
+  border: 0;
+  background: none;
+  padding-top: 0;
+  max-width: 52ch;
+}
+
+.quests__details {
+  margin: 1rem auto 0;
+  max-width: 64ch;
+}
+
+.quests__summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  color: #6b4a15;
+  text-align: center;
+}
+
+.quests__summary::marker {
+  color: #8a6a2f;
+}
+
+/* hundreds of IDs stay compact: a wrapping field of small tokens */
+.quests__ids {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.55rem;
+  border: 1px solid rgba(138, 106, 47, 0.3);
+  border-radius: 4px;
+  background: rgba(255, 248, 224, 0.3);
+}
+
+.quests__id {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: #4a3619;
+}
+
+.quests__csv {
+  display: block;
+  margin: 0.9rem auto 0;
+  padding: 0.4rem 1rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: #6b4a15;
+  background: rgba(255, 248, 224, 0.5);
+  border: 1px solid rgba(138, 106, 47, 0.45);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.quests__csv:hover {
+  background: rgba(201, 164, 92, 0.25);
+}
+
 .memory {
   position: relative;
   margin: 1.4rem 0 1.8rem;

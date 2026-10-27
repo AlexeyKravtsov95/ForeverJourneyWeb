@@ -20,6 +20,7 @@ import {
   MAX_MEMORIES,
   MAX_STRING_LENGTH,
   toTimestamp,
+  type ArchivedMoney,
   type ArchivedProfession,
   type ArchivedZoneVisit,
   type CharacterArchive,
@@ -478,18 +479,20 @@ export function buildJournalFromSavedVariables(
 /**
  * Assembles the optional Character Archive block: the historical snapshot
  * (`recoveredHistory`, trusted only when initialized), its professions, the
- * visited zones, and the saved death counter — each field validated by its
- * own rule, each unknown left out instead of guessed. Returns undefined when
- * the file carries no archive data at all.
+ * visited zones, the saved death counter and the tracked money values — each
+ * field validated by its own rule, each unknown left out instead of guessed.
+ * Returns undefined when the file carries no archive data at all.
  */
 function buildCharacterArchive(record: LuaTable, declaredDeaths: number | undefined): CharacterArchive | undefined {
   const { recovered, professions } = parseRecoveredHistory(record.recoveredHistory)
   const zones = parseVisitedZones(record.visitedZones)
+  const money = parseTrackedMoney(record.money)
   if (
     recovered === undefined &&
     professions.length === 0 &&
     zones.length === 0 &&
-    declaredDeaths === undefined
+    declaredDeaths === undefined &&
+    money === undefined
   ) {
     return undefined
   }
@@ -498,6 +501,7 @@ function buildCharacterArchive(record: LuaTable, declaredDeaths: number | undefi
     professions,
     zones,
     ...(declaredDeaths !== undefined ? { deathsCounter: declaredDeaths } : {}),
+    ...(money !== undefined ? { money } : {}),
   }
 }
 
@@ -521,6 +525,95 @@ function asPlayedSeconds(value: LuaValue | undefined): number | undefined {
 function asQuestCount(value: LuaValue | undefined): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined
   return Math.min(Math.floor(value), 10_000_000)
+}
+
+/**
+ * Money amounts in copper: finite non-negative integers within the safe
+ * integer range only — a fractional, negative or string value is junk, not
+ * 0 copper. The safe integer bound is the domain limit: the project has no
+ * confirmed figure for what the addon may store, and beyond 2^53−1 a JS
+ * number can no longer represent an amount of copper exactly, so such a
+ * value is rejected outright — never clamped (a clamped figure would present
+ * an amount the file never saved) and never floored. A valid zero is a real
+ * value and stays.
+ */
+function asMoneyCopper(value: LuaValue | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    return undefined
+  }
+  return value
+}
+
+/**
+ * Quest IDs: positive integers only (a clamped ID would point at a different
+ * quest, so out-of-range values are dropped, never clamped). The bound covers
+ * every quest ID the game has ever used with an order of magnitude to spare.
+ */
+const MAX_QUEST_ID = 10_000_000
+
+/** Matches MAX_MEMORIES — the registry can never outgrow the chronicle cap. */
+const MAX_ARCHIVED_QUEST_IDS = 20_000
+
+/** Array-part keys as the addon's serializer writes them: "1".."n" (Lua arrays are 1-based). */
+const ARRAY_KEY = /^[1-9]\d*$/
+
+/**
+ * `completedQuests.questIDs` — the saved quest ID list. Structure first: a
+ * present Lua table is a known list only when every key belongs to the array
+ * part (a stringified positive integer, exactly what WoW's serializer emits
+ * for an array); an empty table is a confirmed empty list (`[]`, a real count
+ * of 0). Any named or otherwise non-array key invalidates the whole
+ * structure — including mixed tables that also carry positional keys, which
+ * are rejected in full: reading only their array part would report a count
+ * the file never stated. An unknown or malformed list is `undefined`, never
+ * dressed up as empty. For known lists the policy is deterministic, in file
+ * order: only positive integer IDs ≤ MAX_QUEST_ID survive; duplicates
+ * collapse to their first occurrence; junk entries are skipped; the count is
+ * capped after the fact, exactly like every other archive list.
+ */
+function parseQuestIds(value: LuaValue | undefined): number[] | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  for (const key of Object.keys(value)) {
+    if (!ARRAY_KEY.test(key)) return undefined
+  }
+  const ids: number[] = []
+  const seen = new Set<number>()
+  for (const item of luaToArray(value)) {
+    if (
+      typeof item !== 'number' ||
+      !Number.isInteger(item) ||
+      item <= 0 ||
+      item > MAX_QUEST_ID
+    ) {
+      continue
+    }
+    if (seen.has(item)) continue
+    seen.add(item)
+    ids.push(item)
+    if (ids.length >= MAX_ARCHIVED_QUEST_IDS) break
+  }
+  return ids
+}
+
+/**
+ * `character.money` — the money the addon tracked on its own, read
+ * independently of the historical snapshot (a snapshot without money and
+ * tracked money without a snapshot are both valid). Only fields that are
+ * actually present and valid survive; a table without any of them is not a
+ * money record at all.
+ */
+function parseTrackedMoney(value: LuaValue | undefined): ArchivedMoney | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const table = value
+  const earned = asMoneyCopper(table.earned)
+  const current = asMoneyCopper(table.current)
+  const spent = asMoneyCopper(table.spent)
+  const known: ArchivedMoney = {
+    ...(earned !== undefined ? { earned } : {}),
+    ...(current !== undefined ? { current } : {}),
+    ...(spent !== undefined ? { spent } : {}),
+  }
+  return Object.keys(known).length > 0 ? known : undefined
 }
 
 /** Character level: positive integers within the journal's level cap. */
@@ -554,16 +647,26 @@ function parseRecoveredHistory(
   // a snapshot that was never initialized carries default values, not data
   if (!table || table.initialized !== true) return { professions: [] }
   const capturedAt = toTimestamp(table.capturedAt)
-  const completedQuests = asQuestCount(asTable(table.completedQuests)?.count)
+  const completedQuestsTable = asTable(table.completedQuests)
+  const completedQuests = asQuestCount(completedQuestsTable?.count)
+  const questIDs = parseQuestIds(completedQuestsTable?.questIDs)
   // played.total is the total play time; played.currentLevel is play time at
   // the current level and must never be read as the character level
-  const playedTotal = asPlayedSeconds(asTable(table.played)?.total)
+  const playedTable = asTable(table.played)
+  const playedTotal = asPlayedSeconds(playedTable?.total)
+  const playedCurrentLevel = asPlayedSeconds(playedTable?.currentLevel)
   const level = asLevel(table.level)
+  // money.current of the snapshot is a historical balance, distinct from the
+  // tracked character.money outside the snapshot
+  const moneyBalance = asMoneyCopper(asTable(table.money)?.current)
   const known: RecoveredHistory = {
     ...(capturedAt !== undefined ? { capturedAt } : {}),
     ...(completedQuests !== undefined ? { completedQuests } : {}),
+    ...(questIDs !== undefined ? { questIDs } : {}),
     ...(playedTotal !== undefined ? { playedTotal } : {}),
+    ...(playedCurrentLevel !== undefined ? { playedCurrentLevel } : {}),
     ...(level !== undefined ? { level } : {}),
+    ...(moneyBalance !== undefined ? { moneyBalance } : {}),
   }
   return {
     ...(Object.keys(known).length > 0 ? { recovered: known } : {}),

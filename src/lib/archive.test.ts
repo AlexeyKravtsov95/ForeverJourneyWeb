@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildArchiveView } from './archive'
+import { buildArchiveView, buildQuestRegistryCsv } from './archive'
 import type { Journal } from './journal'
 import { strings } from '../i18n'
 
@@ -42,9 +42,10 @@ describe('buildArchiveView', () => {
     expect(en?.snapshot?.note).toBe(
       'Historical snapshot from SavedVariables. These values may not represent the character\u2019s final state.'
     )
+    // the quest counter now lives in the Quest Registry — the snapshot tiles
+    // never repeat it (FJ-WEB-07)
     expect(en?.snapshot?.stats).toEqual([
       { label: 'Level', value: '25' },
-      { label: 'Quests completed', value: '182' },
       { label: 'Time played', value: '2d 3h 2m 34s' },
       { label: 'Snapshot date', value: 'June 5, 2026' },
     ])
@@ -57,9 +58,30 @@ describe('buildArchiveView', () => {
     )
     expect(ru?.snapshot?.stats).toEqual([
       { label: 'Уровень', value: '25' },
-      { label: 'Квестов выполнено', value: '182' },
       { label: 'Времени в игре', value: '2 д 3 ч 2 мин 34 с' },
       { label: 'Дата снимка', value: '5 июня 2026 г.' },
+    ])
+  })
+
+  it('shows the time played at the recorded level next to the total, distinct from both', () => {
+    // 11827 s → 3h 17m 7s; the value is a duration at the snapshot level and
+    // must never render as a level number or merge into the total
+    const journal = journalWith({
+      recovered: { level: 25, playedTotal: 183_754, playedCurrentLevel: 11_827 },
+      professions: [],
+      zones: [],
+    })
+    const en = buildArchiveView(journal, strings.en, 'en')
+    expect(en?.snapshot?.stats).toEqual([
+      { label: 'Level', value: '25' },
+      { label: 'Time played', value: '2d 3h 2m 34s' },
+      { label: 'Time played at recorded level', value: '3h 17m 7s' },
+    ])
+    const ru = buildArchiveView(journal, strings.ru, 'ru')
+    expect(ru?.snapshot?.stats).toEqual([
+      { label: 'Уровень', value: '25' },
+      { label: 'Времени в игре', value: '2 д 3 ч 2 мин 34 с' },
+      { label: 'Время игры на уровне', value: '3 ч 17 мин 7 с' },
     ])
   })
 
@@ -168,8 +190,220 @@ describe('buildArchiveView', () => {
       'en'
     )
     expect(view?.snapshot).not.toBeNull()
+    expect(view?.economy).toBeNull()
+    // no counter and no IDs anywhere → the registry section stays hidden
+    expect(view?.quests).toBeNull()
     expect(view?.professions).toBeNull()
     expect(view?.zones).toBeNull()
     expect(view?.counterNote).not.toBeNull()
+  })
+
+  it('a snapshot stat alone no longer includes the quest counter (it moved to the registry)', () => {
+    const view = buildArchiveView(
+      journalWith({ recovered: { level: 25, completedQuests: 3 }, professions: [], zones: [] }),
+      strings.en,
+      'en'
+    )
+    expect(view?.snapshot?.stats).toEqual([{ label: 'Level', value: '25' }])
+    // the same saved 3 now belongs to the Quest Registry section
+    expect(view?.quests?.counter).toEqual({ label: 'Saved quest counter', value: '3' })
+  })
+})
+
+describe('buildArchiveView — economy (FJ-WEB-07)', () => {
+  it('renders the four saved figures with their provenance labels in both languages', () => {
+    const journal = journalWith({
+      recovered: { moneyBalance: 96_179 },
+      professions: [],
+      zones: [],
+      money: { earned: 2_833, current: 90_720, spent: 8_292 },
+    })
+    const en = buildArchiveView(journal, strings.en, 'en')
+    expect(en?.economy?.title).toBe('Economy')
+    expect(en?.economy?.note).toBe(
+      'Saved by the addon. These figures may not reflect the character\u2019s final state or the full history of its transactions.'
+    )
+    expect(en?.economy?.rows).toEqual([
+      { label: 'Balance at snapshot', value: '9g 61s 79c' },
+      { label: 'Last recorded balance', value: '9g 7s 20c' },
+      { label: 'Tracked gains', value: '28s 33c' },
+      { label: 'Tracked spending', value: '82s 92c' },
+    ])
+    // no derived "profit"/"net" figure is ever computed from these values
+    expect(JSON.stringify(en?.economy)).not.toMatch(/profit|net|Прибыль|прибыль/i)
+
+    const ru = buildArchiveView(journal, strings.ru, 'ru')
+    expect(ru?.economy?.title).toBe('Экономика')
+    expect(ru?.economy?.rows).toEqual([
+      { label: 'Баланс на момент снимка', value: '9g 61s 79c' },
+      { label: 'Последний сохранённый баланс', value: '9g 7s 20c' },
+      { label: 'Учтённые поступления', value: '28s 33c' },
+      { label: 'Учтённые расходы', value: '82s 92c' },
+    ])
+  })
+
+  it('keeps the two balance sources apart: snapshot balance differs from the last recorded one', () => {
+    const journal = journalWith({
+      recovered: { moneyBalance: 96_179 },
+      professions: [],
+      zones: [],
+      money: { current: 90_720 },
+    })
+    const view = buildArchiveView(journal, strings.en, 'en')
+    expect(view?.economy?.rows).toEqual([
+      { label: 'Balance at snapshot', value: '9g 61s 79c' },
+      { label: 'Last recorded balance', value: '9g 7s 20c' },
+    ])
+  })
+
+  it('shows each row only when its own value exists; a valid zero stays', () => {
+    // tracked money without a snapshot: no snapshot balance row
+    const trackedOnly = journalWith({
+      professions: [],
+      zones: [],
+      money: { earned: 0, spent: 12 },
+    })
+    expect(buildArchiveView(trackedOnly, strings.en, 'en')?.economy?.rows).toEqual([
+      { label: 'Tracked gains', value: '0c' },
+      { label: 'Tracked spending', value: '12c' },
+    ])
+
+    // a snapshot balance alone is still an Economy section
+    const snapshotOnly = journalWith({
+      recovered: { moneyBalance: 0 },
+      professions: [],
+      zones: [],
+    })
+    expect(buildArchiveView(snapshotOnly, strings.ru, 'ru')?.economy?.rows).toEqual([
+      { label: 'Баланс на момент снимка', value: '0c' },
+    ])
+
+    // no money anywhere → no section at all
+    const none = journalWith({ recovered: { level: 10 }, professions: [], zones: [] })
+    expect(buildArchiveView(none, strings.en, 'en')?.economy).toBeNull()
+  })
+})
+
+describe('buildArchiveView — quest registry (FJ-WEB-07)', () => {
+  it('keeps the saved counter and the ID count as two separate values (182 vs 209)', () => {
+    const ids = [8, 25, 235, 264, ...Array.from({ length: 205 }, (_, i) => 300 + i * 3)]
+    expect(ids).toHaveLength(209)
+    const journal = journalWith({
+      recovered: { completedQuests: 182, questIDs: ids },
+      professions: [],
+      zones: [],
+    })
+    const en = buildArchiveView(journal, strings.en, 'en')
+    expect(en?.quests?.title).toBe('Quest Registry')
+    expect(en?.quests?.counter).toEqual({ label: 'Saved quest counter', value: '182' })
+    expect(en?.quests?.savedIds).toEqual({ label: 'Saved quest IDs', value: '209' })
+    expect(en?.quests?.mismatchNote).toBe(
+      'The saved quest counter and the number of recorded IDs differ in the source file. Both values are preserved as recorded.'
+    )
+    expect(en?.quests?.ids).toEqual(ids)
+    expect(en?.quests?.idsToggle).toBe('Saved quest IDs (209)')
+    expect(en?.quests?.note).toBe(
+      'Quest names are not saved in the file — only the saved counter and the raw quest IDs.'
+    )
+
+    const ru = buildArchiveView(journal, strings.ru, 'ru')
+    expect(ru?.quests?.title).toBe('Реестр заданий')
+    expect(ru?.quests?.counter).toEqual({ label: 'Сохранённый счётчик заданий', value: '182' })
+    expect(ru?.quests?.savedIds).toEqual({ label: 'Сохранённых ID заданий', value: '209' })
+    expect(ru?.quests?.mismatchNote).toBe(
+      'Счётчик заданий и количество сохранённых ID различаются в исходном файле. Данные показаны без изменений.'
+    )
+    expect(ru?.quests?.idsToggle).toBe('Сохранённые ID заданий (209)')
+  })
+
+  it('matching counter and ID count: no mismatch note', () => {
+    const journal = journalWith({
+      recovered: { completedQuests: 3, questIDs: [8, 25, 235] },
+      professions: [],
+      zones: [],
+    })
+    const view = buildArchiveView(journal, strings.en, 'en')
+    expect(view?.quests?.counter?.value).toBe('3')
+    expect(view?.quests?.savedIds?.value).toBe('3')
+    expect(view?.quests?.mismatchNote).toBeNull()
+  })
+
+  it('each value stands alone: a counter without IDs, IDs without a counter', () => {
+    const counterOnly = journalWith({
+      recovered: { completedQuests: 12 },
+      professions: [],
+      zones: [],
+    })
+    const counterView = buildArchiveView(counterOnly, strings.en, 'en')
+    expect(counterView?.quests?.counter?.value).toBe('12')
+    expect(counterView?.quests?.savedIds).toBeNull()
+    expect(counterView?.quests?.idsToggle).toBe('Saved quest IDs')
+    expect(counterView?.quests?.ids).toEqual([])
+
+    const idsOnly = journalWith({
+      recovered: { questIDs: [7, 11] },
+      professions: [],
+      zones: [],
+    })
+    const idsView = buildArchiveView(idsOnly, strings.ru, 'ru')
+    expect(idsView?.quests?.counter).toBeNull()
+    expect(idsView?.quests?.savedIds?.value).toBe('2')
+    expect(idsView?.quests?.mismatchNote).toBeNull()
+    expect(idsView?.quests?.ids).toEqual([7, 11])
+  })
+
+  it('a confirmed empty ID list is a real 0 — shown next to the counter with the mismatch note', () => {
+    // questIDs: [] (the file saved an empty list) is not "unknown": the
+    // registry shows 0, explains the 182-vs-0 disagreement, and renders no
+    // collapsible list or CSV affordance for an empty registry
+    const journal = journalWith({
+      recovered: { completedQuests: 182, questIDs: [] },
+      professions: [],
+      zones: [],
+    })
+    const en = buildArchiveView(journal, strings.en, 'en')
+    expect(en?.quests?.counter).toEqual({ label: 'Saved quest counter', value: '182' })
+    expect(en?.quests?.savedIds).toEqual({ label: 'Saved quest IDs', value: '0' })
+    expect(en?.quests?.mismatchNote).toBe(
+      'The saved quest counter and the number of recorded IDs differ in the source file. Both values are preserved as recorded.'
+    )
+    expect(en?.quests?.ids).toEqual([])
+    expect(en?.quests?.idsToggle).toBe('Saved quest IDs') // no "(0)" suffix
+    const ru = buildArchiveView(journal, strings.ru, 'ru')
+    expect(ru?.quests?.savedIds).toEqual({ label: 'Сохранённых ID заданий', value: '0' })
+    expect(ru?.quests?.mismatchNote).toBe(
+      'Счётчик заданий и количество сохранённых ID различаются в исходном файле. Данные показаны без изменений.'
+    )
+  })
+
+  it('quest IDs never become chronicle content or quest names', () => {
+    const journal = journalWith({
+      recovered: { questIDs: [8, 25] },
+      professions: [],
+      zones: [],
+    })
+    // the registry describes raw IDs; no memory is created and no name invented
+    expect(journal.memories).toHaveLength(7)
+    const view = buildArchiveView(journal, strings.en, 'en')
+    expect(view?.quests?.ids).toEqual([8, 25])
+    expect(view?.quests?.ids.every((id) => Number.isInteger(id))).toBe(true)
+    expect(view?.quests?.counter).toBeNull() // never a count derived from the IDs
+  })
+})
+
+describe('buildQuestRegistryCsv (FJ-WEB-07)', () => {
+  it('emits exactly the header and the saved IDs', () => {
+    expect(buildQuestRegistryCsv([8, 25, 235, 264])).toBe('quest_id\n8\n25\n235\n264\n')
+  })
+
+  it('carries no names, no other characters and nothing derived', () => {
+    const csv = buildQuestRegistryCsv([8, 25])
+    expect(csv.split('\n').filter(Boolean)).toEqual(['quest_id', '8', '25'])
+    // apart from the header, nothing alphabetic — no invented quest names
+    expect(csv.replace('quest_id\n', '')).not.toMatch(/[A-Za-z]/)
+  })
+
+  it('an empty registry is just the header', () => {
+    expect(buildQuestRegistryCsv([])).toBe('quest_id\n')
   })
 })

@@ -1,6 +1,7 @@
-import { buildArchiveView } from '../lib/archive'
+import { buildArchiveView, buildQuestRegistryCsv } from '../lib/archive'
 import type { Journal } from '../lib/journal'
 import type { Lang, Strings } from '../i18n'
+import { sanitizeCharacterName } from '../pdf/filename'
 import { Divider } from './Ornaments'
 
 interface Props {
@@ -9,11 +10,28 @@ interface Props {
   lang: Lang
 }
 
+/** Saves the quest registry as a local CSV — a Blob download, no network. */
+function downloadQuestRegistryCsv(ids: readonly number[], characterName: string) {
+  const blob = new Blob([buildQuestRegistryCsv(ids)], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  try {
+    const anchor = document.createElement('a')
+    anchor.href = url
+    const safe = sanitizeCharacterName(characterName)
+    anchor.download = safe ? `QuestRegistry_${safe}.csv` : 'QuestRegistry.csv'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+}
+
 /**
- * Character Archive (FJ-WEB-06): the SavedVariables-only section between the
- * introduction and the chapters. Everything shown comes from the shared view
- * model (src/lib/archive.ts) — the same data the PDF renders. Journals
- * without archive data (FJBOOK1) render nothing here.
+ * Character Archive (FJ-WEB-06 + FJ-WEB-07): the SavedVariables-only section
+ * between the introduction and the chapters. Everything shown comes from the
+ * shared view model (src/lib/archive.ts) — the same data the PDF renders.
+ * Journals without archive data (FJBOOK1) render nothing here.
  */
 export default function ArchiveSection({ journal, tr, lang }: Props) {
   const view = buildArchiveView(journal, tr, lang)
@@ -39,6 +57,66 @@ export default function ArchiveSection({ journal, tr, lang }: Props) {
             ))}
           </div>
           <p className="archive__note">{view.snapshot.note}</p>
+        </section>
+      )}
+
+      {view.economy && (
+        <section className="archive__block" aria-label={view.economy.title}>
+          <h3 className="archive__subtitle">{view.economy.title}</h3>
+          <div className="stats">
+            {view.economy.rows.map((row) => (
+              <div className="stat" key={row.label}>
+                <span className="stat__value">{row.value}</span>
+                <span className="stat__label">{row.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="archive__note">{view.economy.note}</p>
+        </section>
+      )}
+
+      {view.quests && (
+        <section className="archive__block" aria-label={view.quests.title}>
+          <h3 className="archive__subtitle">{view.quests.title}</h3>
+          <div className="stats">
+            {view.quests.counter && (
+              <div className="stat">
+                <span className="stat__value">{view.quests.counter.value}</span>
+                <span className="stat__label">{view.quests.counter.label}</span>
+              </div>
+            )}
+            {view.quests.savedIds && (
+              <div className="stat">
+                <span className="stat__value">{view.quests.savedIds.value}</span>
+                <span className="stat__label">{view.quests.savedIds.label}</span>
+              </div>
+            )}
+          </div>
+          <p className="archive__note">{view.quests.note}</p>
+          {view.quests.mismatchNote && (
+            <p className="archive__note archive__note--mismatch">{view.quests.mismatchNote}</p>
+          )}
+          {view.quests.ids.length > 0 && (
+            <details className="quests__details">
+              <summary className="quests__summary">{view.quests.idsToggle}</summary>
+              <ul className="quests__ids" aria-label={view.quests.idsToggle}>
+                {view.quests.ids.map((id) => (
+                  <li className="quests__id" key={id}>
+                    {id}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {view.quests.ids.length > 0 && (
+            <button
+              type="button"
+              className="quests__csv"
+              onClick={() => downloadQuestRegistryCsv(view.quests?.ids ?? [], journal.character.name)}
+            >
+              ⬇ {view.quests.csvLabel}
+            </button>
+          )}
         </section>
       )}
 

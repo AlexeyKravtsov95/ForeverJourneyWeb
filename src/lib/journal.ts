@@ -21,8 +21,36 @@ export interface JournalCharacter {
 export interface RecoveredHistory {
   capturedAt?: number
   completedQuests?: number
+  /**
+   * Quest IDs saved next to the counter (`completedQuests.questIDs`) — raw
+   * identifiers only; quest names are not part of the file and are never
+   * invented. Deterministically deduplicated, file order preserved. An empty
+   * array is a confirmed empty list (a real count of 0); an absent field
+   * means the count is unknown and is never dressed up as an empty list.
+   */
+  questIDs?: number[]
   playedTotal?: number
+  /**
+   * Play time at the recorded level in seconds (`played.currentLevel`) — a
+   * duration, never the character level.
+   */
+  playedCurrentLevel?: number
   level?: number
+  /** Money balance of the snapshot in copper (`money.current`). */
+  moneyBalance?: number
+}
+
+/**
+ * `character.money` — the money values the addon tracked on its own, in
+ * copper: `current` is the last balance it saved (not necessarily the
+ * character's final balance); `earned`/`spent` are the positive/negative
+ * balance changes it registered — not a lifetime total. Independent of the
+ * historical snapshot: these fields stand alone.
+ */
+export interface ArchivedMoney {
+  earned?: number
+  current?: number
+  spent?: number
 }
 
 export interface JournalJourney {
@@ -81,6 +109,8 @@ export interface CharacterArchive {
    * distinct from journey.deaths, which may fall back to counting DEATH events.
    */
   deathsCounter?: number
+  /** Money tracked by the addon (`character.money`), independently of the snapshot. */
+  money?: ArchivedMoney
 }
 
 export interface Journal {
