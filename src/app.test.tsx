@@ -541,6 +541,48 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     expect(csv).not.toContain('Straider')
   })
 
+  it('a confirmed empty quest list shows 0 and the mismatch note, without a collapsible or CSV button', () => {
+    // questIDs: [] — the file declared the list and it is empty; the count is
+    // a real 0, not an unknown (an absent field would hide the tile instead)
+    const journal: Journal = {
+      format: 'FJJOURNAL',
+      formatVersion: 1,
+      addonVersion: '0.9.8',
+      locale: '',
+      character: { name: 'Straider', race: '', class: '', level: 0 },
+      journey: {},
+      memories: [],
+      archive: {
+        recovered: { completedQuests: 182, questIDs: [] },
+        professions: [],
+        zones: [],
+      },
+    }
+    const html = renderToString(
+      <Book
+        tr={strings.ru}
+        lang="ru"
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={journal}
+        meta={{ kind: 'savedvariables' as const, schema: 3, memories: 0, archive: true }}
+      />
+    )
+    expect(html).toContain('Реестр заданий')
+    expect(html).toContain('Сохранённый счётчик заданий')
+    expect(html).toContain('182')
+    expect(html).toContain('Сохранённых ID заданий')
+    expect(html).toContain('<span class="stat__value">0</span>')
+    expect(html).toContain(
+      'Счётчик заданий и количество сохранённых ID различаются в исходном файле. Данные показаны без изменений.'
+    )
+    // no empty collapsible list, no dead CSV button, no "(0)" toggle suffix
+    expect(html).not.toContain('<details')
+    expect(html).not.toContain('quests__csv')
+    expect(html).not.toContain('Скачать CSV')
+    expect(html).not.toContain('Сохранённые ID заданий (')
+  })
+
   it('shows no archive section for FJBOOK1 journals (demo keeps working)', () => {
     const en = renderToString(
       <Book

@@ -24,7 +24,9 @@ export interface RecoveredHistory {
   /**
    * Quest IDs saved next to the counter (`completedQuests.questIDs`) — raw
    * identifiers only; quest names are not part of the file and are never
-   * invented. Deterministically deduplicated, file order preserved.
+   * invented. Deterministically deduplicated, file order preserved. An empty
+   * array is a confirmed empty list (a real count of 0); an absent field
+   * means the count is unknown and is never dressed up as an empty list.
    */
   questIDs?: number[]
   playedTotal?: number

@@ -159,14 +159,15 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
 
   // Quest Registry exists when either saved value exists; the two numbers are
   // shown side by side exactly as recorded, with a neutral note when they
-  // disagree (182 vs 209 in the real Straider file).
+  // disagree (182 vs 209 in the real Straider file). A confirmed empty ID
+  // list is a real 0 (absent questIDs would leave the count unknown instead).
   const savedIds = recovered?.questIDs
   const counter =
     recovered?.completedQuests !== undefined
       ? { label: tr.archiveQuestCounter, value: String(recovered.completedQuests) }
       : null
   const idCount =
-    savedIds !== undefined && savedIds.length > 0
+    savedIds !== undefined
       ? { label: tr.archiveQuestIdsCount, value: String(savedIds.length) }
       : null
   const mismatch =
@@ -239,9 +240,11 @@ export function buildArchiveView(journal: Journal, tr: Strings, lang: Lang): Arc
             counter,
             savedIds: idCount,
             mismatchNote: mismatch,
+            // the count suffix only makes sense for a non-empty list — the
+            // collapsible and the CSV button stay hidden when ids is empty
             idsToggle:
-              idCount !== null
-                ? `${tr.archiveQuestsShowIds} (${idCount.value})`
+              savedIds !== undefined && savedIds.length > 0
+                ? `${tr.archiveQuestsShowIds} (${savedIds.length})`
                 : tr.archiveQuestsShowIds,
             csvLabel: tr.archiveQuestsCsv,
             ids: savedIds ?? [],

@@ -528,22 +528,20 @@ function asQuestCount(value: LuaValue | undefined): number | undefined {
 }
 
 /**
- * Money amounts in copper: safe non-negative integers only — a fractional or
- * negative number is junk, not 0 copper. Capped at the game's 10-million-gold
- * limit, which every honest balance stays far below.
+ * Money amounts in copper: finite non-negative integers within the safe
+ * integer range only — a fractional, negative or string value is junk, not
+ * 0 copper. The safe integer bound is the domain limit: the project has no
+ * confirmed figure for what the addon may store, and beyond 2^53−1 a JS
+ * number can no longer represent an amount of copper exactly, so such a
+ * value is rejected outright — never clamped (a clamped figure would present
+ * an amount the file never saved) and never floored. A valid zero is a real
+ * value and stays.
  */
-const MAX_MONEY_COPPER = 100_000_000_000_000
-
 function asMoneyCopper(value: LuaValue | undefined): number | undefined {
-  if (
-    typeof value !== 'number' ||
-    !Number.isFinite(value) ||
-    !Number.isInteger(value) ||
-    value < 0
-  ) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
     return undefined
   }
-  return Math.min(value, MAX_MONEY_COPPER)
+  return value
 }
 
 /**
@@ -557,16 +555,22 @@ const MAX_QUEST_ID = 10_000_000
 const MAX_ARCHIVED_QUEST_IDS = 20_000
 
 /**
- * `completedQuests.questIDs` — the saved quest IDs. Deterministic policy,
- * applied in file order: only positive integer IDs ≤ MAX_QUEST_ID survive;
- * duplicates collapse to their first occurrence; junk entries are skipped.
- * The count is capped after the fact, exactly like every other archive list.
+ * `completedQuests.questIDs` — the saved quest ID list. A present Lua table
+ * means the list is known — even when every entry is junk, the result is a
+ * confirmed (possibly empty) list, kept as `questIDs: []` so the view can
+ * show a real count of 0. An absent field or a non-table value means the
+ * count is unknown: undefined, never dressed up as an empty list. For known
+ * lists the policy is deterministic, in file order: only positive integer
+ * IDs ≤ MAX_QUEST_ID survive; duplicates collapse to their first occurrence;
+ * junk entries are skipped; the count is capped after the fact, exactly like
+ * every other archive list.
  */
-function parseQuestIds(value: LuaValue | undefined): number[] {
-  if (typeof value !== 'object' || value === null) return []
+function parseQuestIds(value: LuaValue | undefined): number[] | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
   const ids: number[] = []
   const seen = new Set<number>()
-  for (const item of luaToArray(value)) {    if (
+  for (const item of luaToArray(value)) {
+    if (
       typeof item !== 'number' ||
       !Number.isInteger(item) ||
       item <= 0 ||
@@ -649,7 +653,7 @@ function parseRecoveredHistory(
   const known: RecoveredHistory = {
     ...(capturedAt !== undefined ? { capturedAt } : {}),
     ...(completedQuests !== undefined ? { completedQuests } : {}),
-    ...(questIDs.length > 0 ? { questIDs } : {}),
+    ...(questIDs !== undefined ? { questIDs } : {}),
     ...(playedTotal !== undefined ? { playedTotal } : {}),
     ...(playedCurrentLevel !== undefined ? { playedCurrentLevel } : {}),
     ...(level !== undefined ? { level } : {}),

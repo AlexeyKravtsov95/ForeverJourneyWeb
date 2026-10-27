@@ -871,12 +871,36 @@ describe('economy & quest registry import (FJ-WEB-07)', () => {
     ).toBe('error')
   })
 
-  it('caps an absurdly large money amount at the game limit (10 million gold)', () => {
-    const journal = buildJournalFromSavedVariables(
+  it('money: accepts safe non-negative integers as-is and rejects everything else unchanged', () => {
+    // the confirmed Straider balance and a valid zero pass through untouched
+    const ok = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua('["money"] = { ["current"] = 96179, ["earned"] = 0, ["spent"] = 96179 }')
+      ),
+      'R:N'
+    )
+    expect(ok?.archive?.money).toEqual({ current: 96_179, earned: 0, spent: 96_179 })
+
+    // the safe integer ceiling itself is still a valid amount of copper
+    const ceiling = buildJournalFromSavedVariables(
+      mustRead(characterLua(`["money"] = { ["current"] = ${Number.MAX_SAFE_INTEGER} }`)),
+      'R:N'
+    )
+    expect(ceiling?.archive?.money?.current).toBe(Number.MAX_SAFE_INTEGER)
+
+    // beyond the ceiling the value is rejected — never clamped to some other
+    // figure the file never saved
+    const beyond = buildJournalFromSavedVariables(
+      mustRead(characterLua(`["money"] = { ["current"] = ${Number.MAX_SAFE_INTEGER + 1} }`)),
+      'R:N'
+    )
+    expect(beyond?.archive?.money).toBeUndefined()
+
+    const absurd = buildJournalFromSavedVariables(
       mustRead(characterLua('["money"] = { ["current"] = 999999999999999999 }')),
       'R:N'
     )
-    expect(journal?.archive?.money?.current).toBe(100_000_000_000_000)
+    expect(absurd?.archive?.money).toBeUndefined()
   })
 
   it('an uninitialized snapshot hides its money; tracked money is independent of the snapshot', () => {
@@ -918,6 +942,65 @@ describe('economy & quest registry import (FJ-WEB-07)', () => {
     // to the first occurrence in file order; everything else is dropped
     expect(journal?.archive?.recovered?.questIDs).toEqual([25, 8, 235, 264])
     expect(journal?.archive?.recovered?.completedQuests).toBe(7) // both kept as-is
+  })
+
+  it('questIDs: a confirmed empty list is [], an absent or malformed field is unknown', () => {
+    // a present empty table — the file declares the list and it has no IDs:
+    // kept as [] (a real count of 0), never collapsed into "unknown"
+    const empty = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 182, ["questIDs"] = { } } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(empty?.archive?.recovered?.completedQuests).toBe(182)
+    expect(empty?.archive?.recovered?.questIDs).toEqual([])
+
+    // no questIDs field at all → the count is unknown (undefined)
+    const absent = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 182 } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(absent?.archive?.recovered?.completedQuests).toBe(182)
+    expect(absent?.archive?.recovered?.questIDs).toBeUndefined()
+
+    // a malformed structure is unknown too — never treated as an empty list
+    const stringList = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 182, ["questIDs"] = "junk" } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(stringList?.archive?.recovered?.questIDs).toBeUndefined()
+    const numberList = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 182, ["questIDs"] = 42 } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(numberList?.archive?.recovered?.questIDs).toBeUndefined()
+
+    // a table of pure junk is still a confirmed list — an empty one
+    const allJunk = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 3, ["questIDs"] = { "a", 0, -7, 2.5, 10000001 } } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(allJunk?.archive?.recovered?.questIDs).toEqual([])
+    expect(allJunk?.archive?.recovered?.completedQuests).toBe(3)
   })
 
   it('the quest ID list is capped like every archive list (20 000 entries)', () => {

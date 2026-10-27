@@ -352,6 +352,30 @@ describe('buildArchiveView — quest registry (FJ-WEB-07)', () => {
     expect(idsView?.quests?.ids).toEqual([7, 11])
   })
 
+  it('a confirmed empty ID list is a real 0 — shown next to the counter with the mismatch note', () => {
+    // questIDs: [] (the file saved an empty list) is not "unknown": the
+    // registry shows 0, explains the 182-vs-0 disagreement, and renders no
+    // collapsible list or CSV affordance for an empty registry
+    const journal = journalWith({
+      recovered: { completedQuests: 182, questIDs: [] },
+      professions: [],
+      zones: [],
+    })
+    const en = buildArchiveView(journal, strings.en, 'en')
+    expect(en?.quests?.counter).toEqual({ label: 'Saved quest counter', value: '182' })
+    expect(en?.quests?.savedIds).toEqual({ label: 'Saved quest IDs', value: '0' })
+    expect(en?.quests?.mismatchNote).toBe(
+      'The saved quest counter and the number of recorded IDs differ in the source file. Both values are preserved as recorded.'
+    )
+    expect(en?.quests?.ids).toEqual([])
+    expect(en?.quests?.idsToggle).toBe('Saved quest IDs') // no "(0)" suffix
+    const ru = buildArchiveView(journal, strings.ru, 'ru')
+    expect(ru?.quests?.savedIds).toEqual({ label: 'Сохранённых ID заданий', value: '0' })
+    expect(ru?.quests?.mismatchNote).toBe(
+      'Счётчик заданий и количество сохранённых ID различаются в исходном файле. Данные показаны без изменений.'
+    )
+  })
+
   it('quest IDs never become chronicle content or quest names', () => {
     const journal = journalWith({
       recovered: { questIDs: [8, 25] },
