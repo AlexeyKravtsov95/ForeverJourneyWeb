@@ -554,19 +554,28 @@ const MAX_QUEST_ID = 10_000_000
 /** Matches MAX_MEMORIES — the registry can never outgrow the chronicle cap. */
 const MAX_ARCHIVED_QUEST_IDS = 20_000
 
+/** Array-part keys as the addon's serializer writes them: "1".."n" (Lua arrays are 1-based). */
+const ARRAY_KEY = /^[1-9]\d*$/
+
 /**
- * `completedQuests.questIDs` — the saved quest ID list. A present Lua table
- * means the list is known — even when every entry is junk, the result is a
- * confirmed (possibly empty) list, kept as `questIDs: []` so the view can
- * show a real count of 0. An absent field or a non-table value means the
- * count is unknown: undefined, never dressed up as an empty list. For known
- * lists the policy is deterministic, in file order: only positive integer
- * IDs ≤ MAX_QUEST_ID survive; duplicates collapse to their first occurrence;
- * junk entries are skipped; the count is capped after the fact, exactly like
- * every other archive list.
+ * `completedQuests.questIDs` — the saved quest ID list. Structure first: a
+ * present Lua table is a known list only when every key belongs to the array
+ * part (a stringified positive integer, exactly what WoW's serializer emits
+ * for an array); an empty table is a confirmed empty list (`[]`, a real count
+ * of 0). Any named or otherwise non-array key invalidates the whole
+ * structure — including mixed tables that also carry positional keys, which
+ * are rejected in full: reading only their array part would report a count
+ * the file never stated. An unknown or malformed list is `undefined`, never
+ * dressed up as empty. For known lists the policy is deterministic, in file
+ * order: only positive integer IDs ≤ MAX_QUEST_ID survive; duplicates
+ * collapse to their first occurrence; junk entries are skipped; the count is
+ * capped after the fact, exactly like every other archive list.
  */
 function parseQuestIds(value: LuaValue | undefined): number[] | undefined {
   if (typeof value !== 'object' || value === null) return undefined
+  for (const key of Object.keys(value)) {
+    if (!ARRAY_KEY.test(key)) return undefined
+  }
   const ids: number[] = []
   const seen = new Set<number>()
   for (const item of luaToArray(value)) {

@@ -1003,6 +1003,56 @@ describe('economy & quest registry import (FJ-WEB-07)', () => {
     expect(allJunk?.archive?.recovered?.completedQuests).toBe(3)
   })
 
+  it('questIDs structure: named or mixed keys are unknown; pure arrays are known', () => {
+    // named keys instead of array indices — not the serializer's array form:
+    // the count is unknown, and it must NOT render as a confirmed 0
+    const named = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 182, ["questIDs"] = { ["first"] = 8, ["second"] = 25 } } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(named?.archive?.recovered?.questIDs).toBeUndefined()
+    expect(named?.archive?.recovered?.completedQuests).toBe(182)
+
+    // a mixed table — positional AND named keys — is rejected in full:
+    // reading only its array part would report a count the file never stated
+    const mixed = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 5, ["questIDs"] = { 8, 25, ["total"] = 235 } } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(mixed?.archive?.recovered?.questIDs).toBeUndefined()
+
+    // key 0 is not part of a 1-based Lua array — same verdict as a named key
+    const zeroKey = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 1, ["questIDs"] = { [0] = 8, [1] = 25 } } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(zeroKey?.archive?.recovered?.questIDs).toBeUndefined()
+
+    // a proper array — even one with junk values — stays a known list and
+    // keeps the existing filtering policy (duplicates, range, types)
+    const array = buildJournalFromSavedVariables(
+      mustRead(
+        characterLua(
+          '["recoveredHistory"] = { ["initialized"] = true, ["completedQuests"] = { ["count"] = 4, ["questIDs"] = { 25, "x", 8, 25 } } }'
+        )
+      ),
+      'R:N'
+    )
+    expect(array?.archive?.recovered?.questIDs).toEqual([25, 8])
+  })
+
   it('the quest ID list is capped like every archive list (20 000 entries)', () => {
     const ids = Array.from({ length: 20_001 }, (_, i) => i + 1)
     const luaIds = `{ ${ids.join(', ')} }`
