@@ -32,6 +32,14 @@ export interface Strings {
   importPlaceholder: string
   importButton: string
   demoButton: string
+  /** GROWTH-01: what a visitor needs to bind their own book (vs the demo). */
+  addonNote: string
+  /** GROWTH-01: the CurseForge download link label. */
+  addonLinkLabel: string
+  /** GROWTH-01: footer credit link, rendered only when mythweld.com answers. */
+  byMythweld: string
+  /** Screen-reader notice appended to links that open in a new tab. */
+  externalLinkNotice: string
   importSvLabel: string
   importSvHint: string
   importSvButton: string
@@ -115,6 +123,11 @@ export const strings: Record<Lang, Strings> = {
     importPlaceholder: 'Paste the FJBOOK1 export code here…',
     importButton: 'Import Journal',
     demoButton: 'Try Demo Journal',
+    addonNote:
+      'To bind your own book you need data from the Forever Journey addon — an in-game export code or the ForeverJourney.lua file. The demo journal works without the addon.',
+    addonLinkLabel: 'Get the Forever Journey addon',
+    byMythweld: 'By Mythweld',
+    externalLinkNotice: '(opens in a new tab)',
     importFjbookHint:
       'A book from the in-game export: the adventure chronicle exactly as the addon exported it.',
     importSvLabel: 'Import SavedVariables',
@@ -248,6 +261,11 @@ export const strings: Record<Lang, Strings> = {
     importPlaceholder: 'Вставьте здесь экспортный код FJBOOK1…',
     importButton: 'Импортировать журнал',
     demoButton: 'Демо-журнал',
+    addonNote:
+      'Чтобы собрать собственную книгу, нужны данные аддона Forever Journey — экспортный код из игры или файл ForeverJourney.lua. Демо-журнал работает без установки аддона.',
+    addonLinkLabel: 'Скачать аддон Forever Journey',
+    byMythweld: 'Проект Mythweld',
+    externalLinkNotice: '(открывается в новой вкладке)',
     importFjbookHint:
       'Книга из игрового экспорта: летопись приключений в том виде, в каком её сохранил аддон.',
     importSvLabel: 'Импорт SavedVariables',

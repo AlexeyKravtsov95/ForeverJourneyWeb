@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "generate:codes": "node scripts/generate-test-codes.mjs",
     "generate:sv": "node scripts/generate-savedvariables-fixture.mjs",
+    "generate:og": "node scripts/generate-og-image.mjs",
     "pdf:samples": "vite-node scripts/generate-pdf-samples.tsx"
   },
   "dependencies": {

@@ -621,3 +621,36 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     expect(ru).toContain('архивом персонажа из того, что сохранилось в файле')
   })
 })
+
+describe('GROWTH-01: addon link, own-book note and the Mythweld credit', () => {
+  it('Landing links the CurseForge addon page and explains what an own book needs (EN)', () => {
+    const html = landing('en')
+    expect(html).toContain('href="https://www.curseforge.com/wow/addons/forever-journey"')
+    expect(html).toContain('Get the Forever Journey addon')
+    expect(html).toContain(
+      'To bind your own book you need data from the Forever Journey addon — an in-game export code or the ForeverJourney.lua file.'
+    )
+    expect(html).toContain('The demo journal works without the addon.')
+    expect(html).toContain('rel="noopener noreferrer"')
+  })
+
+  it('Landing несёт ссылку на CurseForge и пояснение про собственную книгу (RU)', () => {
+    const html = landing('ru')
+    expect(html).toContain('href="https://www.curseforge.com/wow/addons/forever-journey"')
+    expect(html).toContain('Скачать аддон Forever Journey')
+    expect(html).toContain(
+      'Чтобы собрать собственную книгу, нужны данные аддона Forever Journey — экспортный код из игры или файл ForeverJourney.lua.'
+    )
+    expect(html).toContain('Демо-журнал работает без установки аддона.')
+  })
+
+  it('the Mythweld credit never renders before the availability probe answers', () => {
+    // the render before the probe resolves (and any server markup) carries
+    // no mythweld link — a dead site must never be linked
+    const en = landing('en')
+    expect(en).not.toContain('mythweld.com')
+    expect(en).not.toContain('By Mythweld')
+    const ru = landing('ru')
+    expect(ru).not.toContain('Проект Mythweld')
+  })
+})

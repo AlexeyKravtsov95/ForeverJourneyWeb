@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Forever Journey — og-image generator (1200×630)</title>
+    <style>
+      /*
+        Source of public/og-image.png (GROWTH-01).
+        Reproduces the Book Creator cover exactly: the palette and background
+        come from src/styles/global.css, the cover panel and gold frame from
+        .sheet--cover / .cover-frame in src/styles/book.css, the ornaments are
+        the inline SVGs of src/components/Ornaments.tsx. No player names.
+        Regenerate: open this file in a browser at a 1200×630 viewport and
+        screenshot the page into public/og-image.png.
+      */
+      :root {
+        --leather-1: #241a12;
+        --leather-2: #16100a;
+        --gold: #c9a45c;
+        --font-serif: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, 'Times New Roman', serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        font-family: var(--font-serif);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+          radial-gradient(1100px 520px at 50% -8%, rgba(158, 116, 58, 0.22), transparent 60%),
+          radial-gradient(800px 460px at 88% 108%, rgba(0, 0, 0, 0.55), transparent 62%),
+          radial-gradient(700px 420px at 6% 96%, rgba(120, 84, 40, 0.18), transparent 60%),
+          linear-gradient(168deg, var(--leather-1), var(--leather-2) 55%, #1b130c);
+      }
+      .cover {
+        position: relative;
+        width: 780px;
+        height: 500px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        border: 1px solid rgba(201, 164, 92, 0.35);
+        border-radius: 4px;
+        background:
+          radial-gradient(120% 90% at 50% 0%, rgba(224, 193, 132, 0.09), transparent 55%),
+          radial-gradient(140% 110% at 50% 115%, rgba(0, 0, 0, 0.5), transparent 60%),
+          linear-gradient(160deg, #2e2118, #1f150d 55%, #271a10);
+        box-shadow:
+          0 22px 48px rgba(0, 0, 0, 0.65),
+          inset 0 0 90px rgba(0, 0, 0, 0.55);
+      }
+      .frame {
+        position: absolute;
+        inset: 18px;
+        border: 1px solid rgba(201, 164, 92, 0.55);
+        pointer-events: none;
+      }
+      .frame::after {
+        content: '';
+        position: absolute;
+        inset: 6px;
+        border: 1px solid rgba(201, 164, 92, 0.3);
+      }
+      .corner {
+        position: absolute;
+        width: 46px;
+        height: 46px;
+        color: #c9a45c;
+        opacity: 0.9;
+      }
+      .corner--tl {
+        top: 17px;
+        left: 17px;
+      }
+      .corner--tr {
+        top: 17px;
+        right: 17px;
+        transform: rotate(90deg);
+      }
+      .corner--br {
+        bottom: 17px;
+        right: 17px;
+        transform: rotate(180deg);
+      }
+      .corner--bl {
+        bottom: 17px;
+        left: 17px;
+        transform: rotate(270deg);
+      }
+      .content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.15rem;
+        padding: 2.2rem 2rem;
+      }
+      .kicker {
+        margin: 0;
+        font-size: 15px;
+        letter-spacing: 0.42em;
+        text-transform: uppercase;
+        color: #a5814a;
+      }
+      .crest {
+        width: 118px;
+        height: 118px;
+        color: #c9a45c;
+      }
+      .title {
+        margin: 0;
+        font-size: 58px;
+        font-variant: small-caps;
+        letter-spacing: 0.14em;
+        font-weight: 600;
+        color: #ecd6a0;
+        text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+        line-height: 1.1;
+      }
+      .divider {
+        width: 300px;
+        height: 21px;
+        color: #a5814a;
+      }
+      .subtitle {
+        margin: 0;
+        font-size: 23px;
+        font-style: italic;
+        color: #d8bd86;
+        line-height: 1.4;
+      }
+      .url {
+        margin: 0.5rem 0 0;
+        font-size: 15px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: #a5814a;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="cover" aria-label="Forever Journey — Book Creator">
+      <div class="frame"></div>
+      <svg class="corner corner--tl" viewBox="0 0 60 60" aria-hidden="true">
+        <g fill="none" stroke="currentColor">
+          <path d="M4 56V20C4 10 10 4 20 4h36" stroke-width="1.5" />
+          <path d="M12 56V24c0-7 5-12 12-12h32" stroke-width="1" opacity=".55" />
+          <path d="M4 44c8 0 13-5 13-13M17 56c0-8 5-13 13-13" stroke-width="1" />
+          <circle cx="21" cy="43" r="2" fill="currentColor" stroke="none" />
+        </g>
+      </svg>
+      <svg class="corner corner--tr" viewBox="0 0 60 60" aria-hidden="true">
+        <g fill="none" stroke="currentColor">
+          <path d="M4 56V20C4 10 10 4 20 4h36" stroke-width="1.5" />
+          <path d="M12 56V24c0-7 5-12 12-12h32" stroke-width="1" opacity=".55" />
+          <path d="M4 44c8 0 13-5 13-13M17 56c0-8 5-13 13-13" stroke-width="1" />
+          <circle cx="21" cy="43" r="2" fill="currentColor" stroke="none" />
+        </g>
+      </svg>
+      <svg class="corner corner--br" viewBox="0 0 60 60" aria-hidden="true">
+        <g fill="none" stroke="currentColor">
+          <path d="M4 56V20C4 10 10 4 20 4h36" stroke-width="1.5" />
+          <path d="M12 56V24c0-7 5-12 12-12h32" stroke-width="1" opacity=".55" />
+          <path d="M4 44c8 0 13-5 13-13M17 56c0-8 5-13 13-13" stroke-width="1" />
+          <circle cx="21" cy="43" r="2" fill="currentColor" stroke="none" />
+        </g>
+      </svg>
+      <svg class="corner corner--bl" viewBox="0 0 60 60" aria-hidden="true">
+        <g fill="none" stroke="currentColor">
+          <path d="M4 56V20C4 10 10 4 20 4h36" stroke-width="1.5" />
+          <path d="M12 56V24c0-7 5-12 12-12h32" stroke-width="1" opacity=".55" />
+          <path d="M4 44c8 0 13-5 13-13M17 56c0-8 5-13 13-13" stroke-width="1" />
+          <circle cx="21" cy="43" r="2" fill="currentColor" stroke="none" />
+        </g>
+      </svg>
+      <div class="content">
+        <p class="kicker">World of Warcraft: Forever</p>
+        <svg class="crest" viewBox="0 0 120 120" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="60" cy="60" r="33" />
+            <circle cx="60" cy="60" r="44" stroke-dasharray="2 5" stroke-width="1" />
+            <path d="M38 52c8-4 15-4 22 0v26c-7-4-14-4-22 0V52z" />
+            <path d="M82 52c-8-4-15-4-22 0v26c7-4 14-4 22 0V52z" />
+            <path d="M60 52v26" stroke-width="1" />
+            <path
+              d="M60 6v12M60 102v12M6 60h12M102 60h12M22 22l8.5 8.5M98 22l-8.5 8.5M22 98l8.5-8.5M98 98l-8.5-8.5"
+              stroke-width="1"
+            />
+            <path d="M18 44c2-3 5-3 7 0-2 3-5 3-7 0z" fill="currentColor" stroke="none" />
+            <path d="M102 44c-2-3-5-3-7 0 2 3 5 3 7 0z" fill="currentColor" stroke="none" />
+          </g>
+        </svg>
+        <h1 class="title">Forever Journey</h1>
+        <svg class="divider" viewBox="0 0 200 14" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="1">
+            <path d="M4 7h68" />
+            <path d="M128 7h68" />
+            <path d="M86 7c3-4 9-4 11 0-2 4-8 4-11 0z" />
+            <path d="M114 7c-3-4-9-4-11 0 2 4 8 4 11 0z" />
+            <path d="M100 1.5 104.5 7 100 12.5 95.5 7z" fill="currentColor" stroke="none" />
+            <circle cx="80" cy="7" r="1.6" fill="currentColor" stroke="none" />
+            <circle cx="120" cy="7" r="1.6" fill="currentColor" stroke="none" />
+          </g>
+        </svg>
+        <p class="subtitle">Turn your adventures into a story worth keeping</p>
+        <p class="url">journal.mythweld.com</p>
+      </div>
+    </main>
+  </body>
+</html>
