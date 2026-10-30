@@ -8,8 +8,7 @@ import { MAX_FILE_BYTES, readSavedVariables, type SavedVariablesOk } from '../li
 import type { Journal } from '../lib/journal'
 import type { ImportSummary } from './Book'
 import { buildDemoCode } from '../demo/demoJournal'
-import { ADDON_PAGE_URL, MYTHWELD_URL } from '../lib/externalLinks'
-import { useSiteAvailable } from '../lib/useSiteAvailable'
+import { ADDON_PAGE_URL, MYTHWELD_LINK_ENABLED, MYTHWELD_URL } from '../lib/externalLinks'
 import { fmt, type Lang, type Strings } from '../i18n'
 import { Divider } from './Ornaments'
 
@@ -38,9 +37,6 @@ export default function Landing({ tr, lang, onLangChange, onImported, onSavedVar
   } | null>(null)
   const [svBusy, setSvBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
-  // The Mythweld credit renders only after mythweld.com answers the probe —
-  // the page must never carry a link to a dead site.
-  const mythweldAvailable = useSiteAvailable(MYTHWELD_URL)
 
   function runImport(text: string) {
     const result = importJournal(text)
@@ -214,7 +210,10 @@ export default function Landing({ tr, lang, onLangChange, onImported, onSavedVar
       <p className="landing__privacy">{tr.privacyNote}</p>
       <footer className="landing__footer">
         <p className="landing__version">FJBOOK1 · FJJOURNAL v1 · SavedVariables schema 3</p>
-        {mythweldAvailable && (
+        {/* Manual gate (GROWTH-01 review): flipped on only after a human
+            confirms mythweld.com serves its home page — the app never probes
+            the domain from a visitor's browser. */}
+        {MYTHWELD_LINK_ENABLED && (
           <a
             className="landing__mythweld"
             href={MYTHWELD_URL}

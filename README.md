@@ -87,12 +87,12 @@
   «Get the Forever Journey addon» на
   [CurseForge](https://www.curseforge.com/wow/addons/forever-journey) с пояснением, что для
   собственной книги нужен экспорт из аддона или `ForeverJourney.lua`, а демо работает без
-  аддона; ссылка «Проект Mythweld» / «By Mythweld» показывается **только после клиентской
-  проверки доступности** `https://mythweld.com/` (no-cors `fetch` с таймаутом 6 с,
-  `src/lib/externalLinks.ts` — никаких неработающих ссылок, никаких данных не отправляется);
-  SEO-метаданные (canonical, Open Graph, Twitter Cards) в `index.html`, `public/robots.txt`,
-  `public/sitemap.xml` и социальное изображение `public/og-image.png` (1200×630) в стиле
-  обложки Book Creator — без имён реальных игроков.
+  аддона; ссылка «Проект Mythweld» / «By Mythweld» (`https://mythweld.com/`) управляется
+  ручным флагом `MYTHWELD_LINK_ENABLED` в `src/lib/externalLinks.ts` — по умолчанию выключена;
+  включать только после ручной проверки, что сайт открывается. Приложение само никогда
+  не обращается к стороннему домену; SEO-метаданные (canonical, Open Graph, Twitter Cards)
+  в `index.html`, `public/robots.txt`, `public/sitemap.xml` и социальное изображение
+  `public/og-image.png` (1200×630) в стиле обложки Book Creator — без имён реальных игроков.
 
 ## Запуск
 

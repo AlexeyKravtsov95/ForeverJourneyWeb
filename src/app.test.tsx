@@ -6,6 +6,7 @@ import Book from './components/Book'
 import CharacterPicker from './components/CharacterPicker'
 import Landing from './components/Landing'
 import { buildDemoCode, demoJournal } from './demo/demoJournal'
+import { MYTHWELD_LINK_ENABLED } from './lib/externalLinks'
 import { strings } from './i18n'
 import { importJournal } from './lib/fjbook'
 import type { Journal } from './lib/journal'
@@ -644,13 +645,24 @@ describe('GROWTH-01: addon link, own-book note and the Mythweld credit', () => {
     expect(html).toContain('Демо-журнал работает без установки аддона.')
   })
 
-  it('the Mythweld credit never renders before the availability probe answers', () => {
-    // the render before the probe resolves (and any server markup) carries
-    // no mythweld link — a dead site must never be linked
+  it('the Mythweld credit stays hidden while the manual flag is off (shipped default)', () => {
+    // the flag is a deliberate manual gate, not a runtime probe
+    expect(MYTHWELD_LINK_ENABLED).toBe(false)
     const en = landing('en')
     expect(en).not.toContain('mythweld.com')
     expect(en).not.toContain('By Mythweld')
+    // the language switch has no say in the flag: RU hides it the same way
     const ru = landing('ru')
     expect(ru).not.toContain('Проект Mythweld')
+  })
+
+  it('rendering the landing never issues a network request', () => {
+    // GROWTH-01 review: no third-party availability probe may run on load;
+    // if anything in the render path fetches, this throws
+    vi.stubGlobal('fetch', () => {
+      throw new Error('network access during landing render')
+    })
+    const html = landing('en')
+    expect(html).toContain('Import Journal')
   })
 })
