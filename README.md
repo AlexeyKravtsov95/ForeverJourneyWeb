@@ -83,6 +83,16 @@
   `ForeverJourney_<ИмяПерсонажа>.pdf`. Дополнительно осталась кнопка «Печать» (браузерный
   диалог) — см. «Проверка печатной версии».
 - Интерфейс на **английском и русском** (переключатель EN/RU).
+- **Ссылки роста и SEO** (GROWTH-01): аккуратная ссылка «Скачать аддон Forever Journey» /
+  «Get the Forever Journey addon» на
+  [CurseForge](https://www.curseforge.com/wow/addons/forever-journey) с пояснением, что для
+  собственной книги нужен экспорт из аддона или `ForeverJourney.lua`, а демо работает без
+  аддона; ссылка «Проект Mythweld» / «By Mythweld» (`https://mythweld.com/`) управляется
+  ручным флагом `MYTHWELD_LINK_ENABLED` в `src/lib/externalLinks.ts` — по умолчанию выключена;
+  включать только после ручной проверки, что сайт открывается. Приложение само никогда
+  не обращается к стороннему домену; SEO-метаданные (canonical, Open Graph, Twitter Cards)
+  в `index.html`, `public/robots.txt`, `public/sitemap.xml` и социальное изображение
+  `public/og-image.png` (1200×630) в стиле обложки Book Creator — без имён реальных игроков.
 
 ## Запуск
 
@@ -93,6 +103,11 @@ npm test           # тесты Vitest
 npm run build      # production-сборка (tsc + vite)
 npm run preview    # предпросмотр собранного сайта
 ```
+
+Социальное изображение (`public/og-image.png`, 1200×630) перегенерируется командой
+`npm run generate:og` — она рендерит `scripts/og-image.html` (оформление обложки Book
+Creator) в headless Chrome через CDP и сохраняет скриншот. Правьте стили в
+`scripts/og-image.html`, затем перегенерируйте PNG.
 
 ## Тестовые коды для ручной проверки импорта
 

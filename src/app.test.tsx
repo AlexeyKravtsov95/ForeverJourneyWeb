@@ -6,6 +6,7 @@ import Book from './components/Book'
 import CharacterPicker from './components/CharacterPicker'
 import Landing from './components/Landing'
 import { buildDemoCode, demoJournal } from './demo/demoJournal'
+import { MYTHWELD_LINK_ENABLED } from './lib/externalLinks'
 import { strings } from './i18n'
 import { importJournal } from './lib/fjbook'
 import type { Journal } from './lib/journal'
@@ -619,5 +620,49 @@ describe('Character Archive (web, FJ-WEB-06)', () => {
     const ru = landing('ru')
     expect(ru).toContain('Книга из игрового экспорта')
     expect(ru).toContain('архивом персонажа из того, что сохранилось в файле')
+  })
+})
+
+describe('GROWTH-01: addon link, own-book note and the Mythweld credit', () => {
+  it('Landing links the CurseForge addon page and explains what an own book needs (EN)', () => {
+    const html = landing('en')
+    expect(html).toContain('href="https://www.curseforge.com/wow/addons/forever-journey"')
+    expect(html).toContain('Get the Forever Journey addon')
+    expect(html).toContain(
+      'To bind your own book you need data from the Forever Journey addon — an in-game export code or the ForeverJourney.lua file.'
+    )
+    expect(html).toContain('The demo journal works without the addon.')
+    expect(html).toContain('rel="noopener noreferrer"')
+  })
+
+  it('Landing несёт ссылку на CurseForge и пояснение про собственную книгу (RU)', () => {
+    const html = landing('ru')
+    expect(html).toContain('href="https://www.curseforge.com/wow/addons/forever-journey"')
+    expect(html).toContain('Скачать аддон Forever Journey')
+    expect(html).toContain(
+      'Чтобы собрать собственную книгу, нужны данные аддона Forever Journey — экспортный код из игры или файл ForeverJourney.lua.'
+    )
+    expect(html).toContain('Демо-журнал работает без установки аддона.')
+  })
+
+  it('the Mythweld credit stays hidden while the manual flag is off (shipped default)', () => {
+    // the flag is a deliberate manual gate, not a runtime probe
+    expect(MYTHWELD_LINK_ENABLED).toBe(false)
+    const en = landing('en')
+    expect(en).not.toContain('mythweld.com')
+    expect(en).not.toContain('By Mythweld')
+    // the language switch has no say in the flag: RU hides it the same way
+    const ru = landing('ru')
+    expect(ru).not.toContain('Проект Mythweld')
+  })
+
+  it('rendering the landing never issues a network request', () => {
+    // GROWTH-01 review: no third-party availability probe may run on load;
+    // if anything in the render path fetches, this throws
+    vi.stubGlobal('fetch', () => {
+      throw new Error('network access during landing render')
+    })
+    const html = landing('en')
+    expect(html).toContain('Import Journal')
   })
 })

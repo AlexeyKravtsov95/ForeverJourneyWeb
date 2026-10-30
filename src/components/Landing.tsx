@@ -8,6 +8,7 @@ import { MAX_FILE_BYTES, readSavedVariables, type SavedVariablesOk } from '../li
 import type { Journal } from '../lib/journal'
 import type { ImportSummary } from './Book'
 import { buildDemoCode } from '../demo/demoJournal'
+import { ADDON_PAGE_URL, MYTHWELD_LINK_ENABLED, MYTHWELD_URL } from '../lib/externalLinks'
 import { fmt, type Lang, type Strings } from '../i18n'
 import { Divider } from './Ornaments'
 
@@ -94,6 +95,15 @@ export default function Landing({ tr, lang, onLangChange, onImported, onSavedVar
         <p className="landing__subtitle">{tr.landingSubtitle}</p>
         <Divider className="landing__divider" />
       </div>
+
+      <section className="landing__addon">
+        <p className="landing__addon-note">{tr.addonNote}</p>
+        <a className="landing__addon-link" href={ADDON_PAGE_URL} target="_blank" rel="noopener noreferrer">
+          {tr.addonLinkLabel}
+          <span aria-hidden="true"> ↗</span>
+          <span className="visually-hidden"> {tr.externalLinkNotice}</span>
+        </a>
+      </section>
 
       <section className="panel panel--sv">
         <span className="panel__label">{tr.importSvLabel}</span>
@@ -198,7 +208,24 @@ export default function Landing({ tr, lang, onLangChange, onImported, onSavedVar
       </section>
 
       <p className="landing__privacy">{tr.privacyNote}</p>
-      <p className="landing__version">FJBOOK1 · FJJOURNAL v1 · SavedVariables schema 3</p>
+      <footer className="landing__footer">
+        <p className="landing__version">FJBOOK1 · FJJOURNAL v1 · SavedVariables schema 3</p>
+        {/* Manual gate (GROWTH-01 review): flipped on only after a human
+            confirms mythweld.com serves its home page — the app never probes
+            the domain from a visitor's browser. */}
+        {MYTHWELD_LINK_ENABLED && (
+          <a
+            className="landing__mythweld"
+            href={MYTHWELD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {tr.byMythweld}
+            <span aria-hidden="true"> ↗</span>
+            <span className="visually-hidden"> {tr.externalLinkNotice}</span>
+          </a>
+        )}
+      </footer>
     </main>
   )
 }
