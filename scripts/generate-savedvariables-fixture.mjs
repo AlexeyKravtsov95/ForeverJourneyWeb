@@ -597,6 +597,94 @@ const storytellerChapters = indexed([
   },
 ])
 
+// ---------------------------------------------------------------------------
+// FJ-WEB-03 review: a REALISTIC chapters character — Гордунни:Хронист. The
+// SavedVariables of the real addon carry NO chapterId on memories: membership
+// is resolved by Chapters.FindForTimestamp intervals. Chapters c:1 (closed
+// June 10 → June 20 12:00) and c:2 (open, July 1). The memories deliberately
+// hit the interval edges: June 10 00:00 == c:1.startedAt (inside), June 20
+// 12:00 == c:1.closedAt (outside — half-open interval), plus the June
+// regression shape: unbound June 2 → chapter → unbound June 25 must never
+// collapse into one June section placed before the chapter.
+// ---------------------------------------------------------------------------
+const chroniclerAt = (month, dayOfMonth, hour = 0, minute = 0) =>
+  Math.floor(Date.UTC(2026, month, dayOfMonth, hour, minute) / 1000)
+
+const chroniclerMemories = [
+  // before any chapter → the first June section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(5, 2, 9),
+    location: 'Подгород',
+    data: { title: 'Двадцатидневка до глав', note: 'Журнал вёлся, глав ещё не было.' },
+  }),
+  // exactly at c:1.startedAt → inside the chapter (startedAt <= timestamp)
+  memory({
+    type: 'ZONE',
+    source: 'RECORDED',
+    timestamp: chroniclerAt(5, 10, 0),
+    location: 'Долина Лок Модан',
+    data: { zoneName: 'Loch Modan' },
+  }),
+  // squarely inside c:1
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(5, 12, 15),
+    location: 'Лок Модан',
+    favorite: true,
+    data: { title: 'Плотина в тумане', note: 'Вода гудела за стеной всю ночь.' },
+  }),
+  // exactly at c:1.closedAt → outside (timestamp < closedAt is false)
+  memory({
+    type: 'DEATH',
+    source: 'RECORDED',
+    timestamp: chroniclerAt(5, 20, 12),
+    location: 'Лок Модан',
+    data: { killerName: 'Kobold Geomancer' },
+  }),
+  // after c:1 closed, before c:2 starts → the second June section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(5, 25, 18),
+    location: 'Тирисфальские леса',
+    data: { title: 'Дорога домой без главы', note: 'Глава закрылась, путь продолжается.' },
+  }),
+  // inside the open chapter c:2
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 5, 10),
+    location: 'Серебряный бор',
+    data: { title: 'После солнцеворота', note: 'Начало длинного июля.' },
+  }),
+  // undated, no binding possible → the trailing undated section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    location: 'Подгород',
+    data: { title: 'Без числа', note: 'Интервал не определить — даты нет.' },
+  }),
+]
+
+const chroniclerChapters = indexed([
+  {
+    id: 'c:1',
+    title: 'Дороги июня',
+    description: 'От стены Стромгарда до плотины Лок Модана — десять дней между двумя столбами дороги.',
+    startedAt: chroniclerAt(5, 10),
+    closedAt: chroniclerAt(5, 20, 12),
+  },
+  {
+    id: 'c:2',
+    title: 'После солнцеворота',
+    description: 'Открытая глава: лето ещё не кончилось.',
+    startedAt: chroniclerAt(6, 1),
+  },
+])
+
 const chaptersDb = {
   schemaVersion: 3,
   addonVersion: '0.8.0',
@@ -610,6 +698,16 @@ const chaptersDb = {
       activeChapterID: 'g-2',
       chapters: storytellerChapters,
       memories: indexed(storytellerMemories),
+    },
+    // realistic shape: memories carry NO chapterId — the importer must
+    // restore membership from the chapter intervals (FindForTimestamp)
+    'Гордунни:Хронист': {
+      createdAt: chroniclerAt(5, 1, 8),
+      // no stats/recoveredHistory either: the single DEATH event feeds the
+      // counter and the book gains no archive page — chapters only
+      activeChapterID: 'c:2',
+      chapters: chroniclerChapters,
+      memories: indexed(chroniclerMemories),
     },
   },
 }

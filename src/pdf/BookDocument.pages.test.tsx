@@ -340,4 +340,73 @@ describe('BookDocument pages — author chapters (FJ-WEB-03)', () => {
     },
     RENDER_TIMEOUT
   )
+
+  // ---- FJ-WEB-03 review: interval-resolved membership (no chapterId in the
+  // file) and the month split around an author chapter, in the real PDF ----
+
+  it(
+    'Хронист (RU): realistic SavedVariables without chapterId — June splits around the chapter',
+    async () => {
+      const journal = svJournal('ForeverJourney-chapters.lua', 'Гордунни:Хронист')
+      const html = renderToString(
+        <Book
+          tr={strings.ru}
+          lang="ru"
+          onLangChange={() => undefined}
+          onBack={() => undefined}
+          journal={journal}
+          meta={{ kind: 'savedvariables', schema: 3, memories: 7, archive: false }}
+        />
+      )
+      const pages = await renderPages(journal, 'ru')
+      const tr = strings.ru
+
+      // cover + intro + июнь(I) + «Дороги июня»(II) + июнь(III) +
+      // «После солнцеворота»(IV) + без даты(V) + end — no archive page
+      expect(pages).toHaveLength(8)
+      expect(pdfPageContains(pages[2], 'ГЛАВА I')).toBe(true)
+      expect(pdfPageContains(pages[2], 'июнь 2026')).toBe(true)
+      expect(pdfPageContains(pages[3], 'ГЛАВА II')).toBe(true)
+      expect(pdfPageContains(pages[3], 'Дороги июня')).toBe(true)
+      // the description follows the title as extractable Cyrillic text
+      expect(pdfPageContains(pages[3], 'От стены Стромгарда до плотины Лок Модана')).toBe(true)
+      expect(pdfPageContains(pages[4], 'ГЛАВА III')).toBe(true)
+      expect(pdfPageContains(pages[4], 'июнь 2026')).toBe(true) // the SAME month, its second section
+      expect(pdfPageContains(pages[5], 'ГЛАВА IV')).toBe(true)
+      expect(pdfPageContains(pages[5], 'После солнцеворота')).toBe(true)
+      expect(pdfPageContains(pages[6], tr.undatedChapter)).toBe(true)
+      expect(pdfPageContains(pages[7], tr.endTitle)).toBe(true)
+
+      // nothing lost or duplicated: all seven memories, in both renderings
+      const allTitles = [
+        'Двадцатидневка до глав',
+        'Открыта локация: Loch Modan', // Jun 10 00:00 == startedAt → inside
+        'Плотина в тумане',
+        'Пал в бою — Kobold Geomancer', // Jun 20 12:00 == closedAt → outside
+        'Дорога домой без главы',
+        'Начало длинного июля',
+        'Без числа',
+      ]
+      for (const title of allTitles) {
+        expect(pdfContains(pages, title)).toBe(true)
+        expect(html).toContain(title)
+      }
+
+      // parity: the section sequence in the web book and in the PDF pages
+      // matches, walking past repeated month labels with a cursor
+      const labels = ['июнь 2026', 'Дороги июня', 'июнь 2026', 'После солнцеворота', tr.undatedChapter]
+      let htmlCursor = 0
+      let pageCursor = 0
+      for (const label of labels) {
+        const at = html.indexOf(label, htmlCursor)
+        expect(at).toBeGreaterThanOrEqual(0)
+        expect(at).toBeGreaterThanOrEqual(htmlCursor)
+        htmlCursor = at + label.length
+        const pageIndex = pages.findIndex((page, index) => index >= pageCursor && pdfPageContains(page, label))
+        expect(pageIndex).toBeGreaterThanOrEqual(pageCursor)
+        pageCursor = pageIndex
+      }
+    },
+    RENDER_TIMEOUT
+  )
 })

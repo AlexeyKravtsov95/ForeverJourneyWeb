@@ -268,4 +268,131 @@ describe('buildChapters with author chapters (FJ-WEB-03)', () => {
     expect(chapters).toHaveLength(1)
     expect(chapters[0].label).toBe('Первая')
   })
+
+  // ---- FJ-WEB-03 review: a chapter starting mid-month splits that month ----
+
+  it('the mandatory regression: 2 июня (вне глав) → глава (10 июня) → 12 июня (в главе) → 25 июня (вне глав)', () => {
+    const chapters = buildChapters(
+      [
+        memory({ title: '2 июня', timestamp: Date.UTC(2026, 5, 2) }),
+        memory({ title: '12 июня', timestamp: Date.UTC(2026, 5, 12), chapterId: 'g-1' }),
+        memory({ title: '25 июня', timestamp: Date.UTC(2026, 5, 25) }),
+      ],
+      'en',
+      'Undated memories',
+      [chapter({ title: 'Дороги июня', startedAt: Date.UTC(2026, 5, 10), closedAt: Date.UTC(2026, 5, 20) })]
+    )
+    // the month split around the chapter — June appears as TWO sections
+    expect(chapters.map((c) => c.label)).toEqual(['June 2026', 'Дороги июня', 'June 2026'])
+    expect(chapters[0].memories.map((m) => m.title)).toEqual(['2 июня'])
+    expect(chapters[1].memories.map((m) => m.title)).toEqual(['12 июня'])
+    expect(chapters[2].memories.map((m) => m.title)).toEqual(['25 июня'])
+  })
+
+  it('splits one month into three segments when two chapters start inside it', () => {
+    const chapters = buildChapters(
+      [
+        memory({ title: 'начало', timestamp: Date.UTC(2026, 5, 1) }),
+        memory({ title: 'между', timestamp: Date.UTC(2026, 5, 14) }),
+        memory({ title: 'конец', timestamp: Date.UTC(2026, 5, 28) }),
+        memory({ title: 'в первой', timestamp: Date.UTC(2026, 5, 5), chapterId: 'g-1' }),
+        memory({ title: 'во второй', timestamp: Date.UTC(2026, 5, 20), chapterId: 'g-2' }),
+      ],
+      'en',
+      'Undated memories',
+      [
+        chapter({ title: 'Первая', startedAt: Date.UTC(2026, 5, 4) }),
+        chapter({ id: 'g-2', title: 'Вторая', startedAt: Date.UTC(2026, 5, 15) }),
+      ]
+    )
+    expect(chapters.map((c) => c.label)).toEqual([
+      'June 2026',
+      'Первая',
+      'June 2026',
+      'Вторая',
+      'June 2026',
+    ])
+    expect(chapters.flatMap((c) => c.memories.map((m) => m.title))).toEqual([
+      'начало',
+      'в первой',
+      'между',
+      'во второй',
+      'конец',
+    ])
+  })
+
+  it('an empty chapter renders nothing AND divides no month', () => {
+    const chapters = buildChapters(
+      [
+        memory({ title: 'до', timestamp: Date.UTC(2026, 5, 2) }),
+        memory({ title: 'после', timestamp: Date.UTC(2026, 5, 25) }),
+      ],
+      'en',
+      'Undated memories',
+      [chapter({ title: 'Пустая', startedAt: Date.UTC(2026, 5, 10) })]
+    )
+    // no bound memories → no section, and the two unbound memories share ONE June section
+    expect(chapters).toHaveLength(1)
+    expect(chapters[0].label).toBe('June 2026')
+    expect(chapters[0].memories).toHaveLength(2)
+  })
+
+  it('an explicit binding keeps priority over the timestamp inside another chapter', () => {
+    const chapters = buildChapters(
+      [
+        // dated inside June chapter's interval, but explicitly bound to the July one
+        memory({ title: 'перелёт', timestamp: Date.UTC(2026, 5, 12), chapterId: 'g-2' }),
+        memory({ title: 'оседлое', timestamp: Date.UTC(2026, 5, 15), chapterId: 'g-1' }),
+      ],
+      'en',
+      'Undated memories',
+      [
+        chapter({ title: 'Июньская', startedAt: Date.UTC(2026, 5, 10) }),
+        chapter({ id: 'g-2', title: 'Июльская', startedAt: Date.UTC(2026, 6, 1) }),
+      ]
+    )
+    expect(chapters.map((c) => c.label)).toEqual(['Июньская', 'Июльская'])
+    expect(chapters[1].memories.map((m) => m.title)).toEqual(['перелёт'])
+  })
+
+  it('keeps equal timestamps stable across a month split', () => {
+    const at = Date.UTC(2026, 5, 25, 12)
+    const chapters = buildChapters(
+      [
+        memory({ title: 'b', timestamp: at }),
+        memory({ title: 'a', timestamp: at }),
+        memory({ title: 'в главе', timestamp: Date.UTC(2026, 5, 12), chapterId: 'g-1' }),
+      ],
+      'en',
+      'Undated memories',
+      [chapter({ title: 'Дороги июня', startedAt: Date.UTC(2026, 5, 10) })]
+    )
+    expect(chapters).toHaveLength(2)
+    expect(chapters[1].memories.map((m) => m.title)).toEqual(['b', 'a'])
+  })
+
+  it('loses and duplicates no memory across the split (identity check)', () => {
+    const memories = [
+      memory({ title: 'до', timestamp: Date.UTC(2026, 5, 2) }),
+      memory({ title: 'глава-1', timestamp: Date.UTC(2026, 5, 11), chapterId: 'g-1' }),
+      memory({ title: 'граница', timestamp: Date.UTC(2026, 5, 10) }), // == chapter start
+      memory({ title: 'после', timestamp: Date.UTC(2026, 5, 25) }),
+      memory({ title: 'без даты' }),
+    ]
+    const chapters = buildChapters(
+      memories,
+      'en',
+      'Undated memories',
+      [chapter({ title: 'Дороги июня', startedAt: Date.UTC(2026, 5, 10) })]
+    )
+    // every input memory appears exactly once, by identity
+    const collected = chapters.flatMap((c) => c.memories)
+    expect(collected).toHaveLength(memories.length)
+    for (const entry of memories) {
+      expect(collected.filter((m) => m === entry)).toHaveLength(1)
+    }
+    // a memory stamped exactly at the chapter start sorts after the chapter
+    expect(chapters.map((c) => c.label)).toEqual(['June 2026', 'Дороги июня', 'June 2026', 'Undated memories'])
+    expect(chapters[2].memories.map((m) => m.title)).toEqual(['граница', 'после'])
+  })
 })

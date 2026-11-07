@@ -726,4 +726,33 @@ describe('author chapters (web, FJ-WEB-03)', () => {
     expect(html).toContain('March 2026') // month labels still localize
     expect(html).toContain('Undated memories')
   })
+
+  it('builds author chapters from interval-resolved membership with the month split around them', () => {
+    const CHRONICLER = 'Гордунни:Хронист'
+    const lua = readFileSync(
+      new URL('../fixtures/savedvariables/ForeverJourney-chapters.lua', import.meta.url),
+      'utf8'
+    )
+    const sv = readSavedVariables(lua)
+    if (sv.status !== 'ok') throw new Error('chapters fixture must parse')
+    const journal = buildJournalFromSavedVariables(sv, CHRONICLER)
+    if (!journal) throw new Error('chronicler journal must build')
+
+    const html = renderBook(journal, 'ru')
+    // the realistic file: no chapterId anywhere — membership came from the
+    // chapter intervals; June splits into two sections around «Дороги июня»
+    // (each section label renders twice: the <h2> text and its aria-label)
+    expect(html.match(/июнь 2026 г\./g)).toHaveLength(4)
+    expect(html.indexOf('июнь 2026 г.')).toBeLessThan(html.indexOf('Дороги июня'))
+    expect(html.indexOf('Дороги июня')).toBeLessThan(html.lastIndexOf('июнь 2026 г.'))
+    expect(html).toContain('От стены Стромгарда до плотины Лок Модана')
+    expect(html).toContain('После солнцеворота')
+    expect(html).toContain('Воспоминания без даты')
+    // all seven memories, in their resolved sections
+    expect(html).toContain('Двадцатидневка до глав')
+    expect(html).toContain('Плотина в тумане')
+    expect(html).toContain('Дорога домой без главы')
+    expect(html).toContain('После солнцеворота') // the July memory title matches the chapter title
+    expect(html).toContain('Без числа')
+  })
 })

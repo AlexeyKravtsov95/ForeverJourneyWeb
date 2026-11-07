@@ -62,7 +62,12 @@ function sortChronologically(memories: JournalMemory[]): JournalMemory[] {
  * - a memory's `chapterId` binding wins (the player's partition is the truth,
  *   even when a timestamp falls outside the chapter's interval);
  * - memories without a binding (or with a dangling one) are NOT lost — they
- *   keep the chronological month sections;
+ *   keep chronological month sections;
+ * - a chapter that starts mid-month splits that month: the memories before it
+ *   close one month section, the memories after it open another, so a late
+ *   unbound memory is never moved ahead of an earlier author chapter. Only
+ *   chapters that actually render (with bound memories) divide the timeline —
+ *   an empty chapter produces no section and no split;
  * - sections merge into one sequence by their start time (a chapter by its
  *   startedAt, a month section by its first dated memory), undated last; on a
  *   tie the author chapter comes first — it opens the period.
@@ -97,24 +102,62 @@ export function buildChapters(
   type Section = Chapter & { startAt: number; rank: number }
   const sections: Section[] = []
 
-  for (const { chapter, memories } of bound.values()) {
-    // no memories → no section (the book shows no empty chapters)
-    if (memories.length === 0) continue
+  // the starts of chapters that actually render divide the timeline into gaps
+  const activeStarts: number[] = []
+  for (const { chapter, memories: chapterMemories } of bound.values()) {
+    // no memories → no section and no split (the book shows no empty chapters)
+    if (chapterMemories.length === 0) continue
+    activeStarts.push(chapter.startedAt)
     sections.push({
       key: `chapter:${chapter.id}`,
       label: chapter.title,
       ...(chapter.description !== '' ? { description: chapter.description } : {}),
-      memories,
+      memories: chapterMemories,
       startAt: chapter.startedAt,
       rank: 0,
     })
   }
+  activeStarts.sort((a, b) => a - b)
 
-  for (const section of buildMonthChapters(unchaptered, lang, undatedLabel)) {
-    const firstDated = section.memories.find((memory) => memory.timestamp !== undefined)
+  // how many active chapters start at or before t — the gap the moment t
+  // lives in; a memory stamped exactly at a chapter start belongs after it
+  // (binary search: activeStarts is sorted)
+  const gapOf = (t: number): number => {
+    let lo = 0
+    let hi = activeStarts.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (activeStarts[mid] <= t) lo = mid + 1
+      else hi = mid
+    }
+    return lo
+  }
+
+  // unbound memories keep their month sections — but the gap index joins the
+  // section key, so one calendar month may yield several sections when an
+  // author chapter starts inside it
+  const segments = new Map<string, { firstDated?: number; memories: JournalMemory[] }>()
+  for (const memory of unchaptered) {
+    const key =
+      memory.timestamp === undefined
+        ? 'undated'
+        : `${monthKey(memory.timestamp)}:${gapOf(memory.timestamp)}`
+    const segment = segments.get(key)
+    if (segment) segment.memories.push(memory)
+    else
+      segments.set(key, {
+        firstDated: memory.timestamp,
+        memories: [memory],
+      })
+  }
+  for (const [key, segment] of segments) {
+    // unchaptered is chronological, so the first memory of a dated segment is
+    // its earliest dated one
     sections.push({
-      ...section,
-      startAt: firstDated?.timestamp ?? Number.POSITIVE_INFINITY,
+      key,
+      label: segment.firstDated !== undefined ? monthLabel(segment.firstDated, lang) : undatedLabel,
+      memories: segment.memories,
+      startAt: segment.firstDated ?? Number.POSITIVE_INFINITY,
       rank: 1,
     })
   }

@@ -1229,6 +1229,137 @@ describe('author chapters import (FJ-WEB-03)', () => {
     const capped = build(overflow)
     expect(capped?.chapters).toHaveLength(512)
   })
+
+  // ---- FJ-WEB-03 review: membership restored from intervals when the file
+  // carries no chapterId (the realistic SavedVariables shape) ----
+
+  const CHRONICLER = 'Гордунни:Хронист'
+  const chroniclerJournal = () => {
+    const sv = mustRead(fixture(CHAPTERS_FIXTURE))
+    const journal = buildJournalFromSavedVariables(sv, CHRONICLER)
+    if (!journal) throw new Error('chronicler journal must build')
+    return journal
+  }
+
+  it('restores chapter membership by FindForTimestamp for memories without chapterId (c:1/c:2 fixture)', () => {
+    const journal = chroniclerJournal()
+    // derived bindings: interval edges included — startedAt inside,
+    // closedAt outside (half-open), the open chapter has no upper bound
+    expect(journal.memories.map((m) => m.chapterId ?? null)).toEqual([
+      null, // June 2 — before any chapter
+      'c:1', // June 10 00:00 == c:1.startedAt → inside
+      'c:1', // June 12 — squarely inside
+      null, // June 20 12:00 == c:1.closedAt → outside
+      null, // June 25 — between the chapters
+      'c:2', // July 5 — inside the open chapter
+      null, // undated — no interval to match
+    ])
+    // nothing is lost: all seven memories survive the conversion
+    expect(journal.memories).toHaveLength(7)
+  })
+
+  it('builds the book from interval-resolved membership: June splits around c:1', () => {
+    const journal = chroniclerJournal()
+    const chapters = buildChapters(journal.memories, 'ru', strings.ru.undatedChapter, journal.chapters)
+    expect(chapters.map((c) => c.label)).toEqual([
+      'июнь 2026 г.', // June 2 only — the rest of June moved behind the chapter
+      'Дороги июня', // c:1: June 10 (== startedAt) + June 12
+      'июнь 2026 г.', // June 20 (== closedAt, outside) + June 25
+      'После солнцеворота', // c:2 (open): July 5
+      'Воспоминания без даты',
+    ])
+    expect(chapters[1].memories.map((m) => m.title || m.type)).toEqual([
+      'Discovered Loch Modan',
+      'Плотина в тумане',
+    ])
+    expect(chapters[2].memories.map((m) => m.title)).toEqual([
+      'Fell in battle — Kobold Geomancer', // June 20 == closedAt → outside the chapter
+      'Дорога домой без главы', // June 25
+    ])
+    // every memory exactly once across the sections
+    expect(chapters.flatMap((c) => c.memories)).toHaveLength(7)
+  })
+
+  it('an explicit chapterId wins over the interval; a dangling one is never re-resolved', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:S"] = {',
+      '\t\t\t["chapters"] = {',
+      '\t\t\t\t{ ["id"] = "c:1", ["title"] = "Июньская", ["startedAt"] = 1780819200, ["closedAt"] = 1781683200 },',
+      '\t\t\t\t{ ["id"] = "c:2", ["title"] = "Июльская", ["startedAt"] = 1782854400 },',
+      '\t\t\t},',
+      '\t\t\t["memories"] = {',
+      // inside c:1's interval, but explicitly bound to c:2 — the binding wins
+      '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1781000000, ["chapterId"] = "c:2" },',
+      // inside c:1's interval, dangling binding — kept as data, not re-resolved
+      '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1781000001, ["chapterId"] = "zz" },',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:S')
+    expect(journal?.memories.map((m) => m.chapterId)).toEqual(['c:2', 'zz'])
+  })
+
+  it('adjacent intervals hand the boundary timestamp to the next chapter; equal timestamps agree', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:S"] = {',
+      '\t\t\t["chapters"] = {',
+      // [Jun 1, Jun 10) and [Jun 10, open) — half-open, adjacent
+      '\t\t\t\t{ ["id"] = "c:1", ["title"] = "До переправы", ["startedAt"] = 1780300800, ["closedAt"] = 1780905600 },',
+      '\t\t\t\t{ ["id"] = "c:2", ["title"] = "После переправы", ["startedAt"] = 1780905600 },',
+      '\t\t\t},',
+      '\t\t\t["memories"] = {',
+      '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1780905599 },', // Jun 9 23:59 → c:1
+      '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1780905600 },', // exactly c:2.startedAt → c:2
+      '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1780905600 },', // equal timestamps agree
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:S')
+    expect(journal?.memories.map((m) => m.chapterId)).toEqual(['c:1', 'c:2', 'c:2'])
+  })
+
+  it('overlapping open chapters resolve to the first match in file order (deterministic)', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:S"] = {',
+      '\t\t\t["chapters"] = {',
+      '\t\t\t\t{ ["id"] = "c:1", ["title"] = "Ранняя", ["startedAt"] = 1780300800 },',
+      '\t\t\t\t{ ["id"] = "c:2", ["title"] = "Поздняя", ["startedAt"] = 1780646400 },',
+      '\t\t\t},',
+      '\t\t\t["memories"] = {',
+      // after both starts — both intervals contain it; file order decides
+      '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1780700000 },',
+      // after only the first start
+      '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1780500000 },',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:S')
+    expect(journal?.memories.map((m) => m.chapterId)).toEqual(['c:1', 'c:1'])
+  })
+
+  it('never rewrites the parsed SavedVariables: a second conversion is identical', () => {
+    const sv = mustRead(fixture(CHAPTERS_FIXTURE))
+    const first = buildJournalFromSavedVariables(sv, CHRONICLER)
+    const second = buildJournalFromSavedVariables(sv, CHRONICLER)
+    expect(first).toEqual(second)
+    // and the interval resolution produced real bindings both times
+    expect(first?.memories.filter((m) => m.chapterId !== undefined)).toHaveLength(3)
+  })
 })
 
 describe('regression guards', () => {
