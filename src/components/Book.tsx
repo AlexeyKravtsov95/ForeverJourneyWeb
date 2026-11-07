@@ -26,7 +26,7 @@ interface Props {
 
 export default function Book({ tr, lang, onLangChange, journal, meta, onBack }: Props) {
   const chapters = useMemo<Chapter[]>(
-    () => buildChapters(journal.memories, lang, tr.undatedChapter),
+    () => buildChapters(journal.memories, lang, tr.undatedChapter, journal.chapters ?? []),
     [journal, lang, tr]
   )
   const [pdfBusy, setPdfBusy] = useState(false)
@@ -122,6 +122,9 @@ export default function Book({ tr, lang, onLangChange, journal, meta, onBack }: 
                   {fmt(tr.chapterKicker, { roman: toRoman(index + 1) })}
                 </p>
                 <h2 className="chapter-head__title">{chapter.label}</h2>
+                {chapter.description ? (
+                  <p className="chapter-head__description">{chapter.description}</p>
+                ) : null}
                 <Divider />
               </header>
               {chapter.memories.map((memory, memoryIndex) => (

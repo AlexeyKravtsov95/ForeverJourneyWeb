@@ -51,6 +51,7 @@ function memory({
   data = {},
   title,
   description,
+  chapterId,
 }) {
   const record = {}
   if (type !== undefined) record.type = type
@@ -62,6 +63,7 @@ function memory({
   if (Object.keys(data).length > 0) record.data = data
   if (title !== undefined) record.title = title
   if (description !== undefined) record.description = description
+  if (chapterId !== undefined) record.chapterId = chapterId
   return record
 }
 
@@ -471,11 +473,257 @@ const maliciousLua = [
   '',
 ].join('\n')
 
+// ---------------------------------------------------------------------------
+// FJ-WEB-03 author chapters fixture: Гордунни:Сказитель — the player's own
+// partition of the chronicle next to the automatic grouping. Covers: memories
+// older than every chapter (the March month section survives), a closed
+// chapter (g-1) and an open one (g-2, no closedAt), a chapter without
+// memories (g-3 — must never render), a binding to a chapter the file does
+// not carry (dangling — the memory falls back to its month), equal
+// timestamps inside a chapter (file order must survive), an undated memory
+// bound to a chapter (the binding wins) and an undated unbound one (the
+// trailing section). activeChapterID is editing state, not book data — the
+// importer must ignore it.
+// ---------------------------------------------------------------------------
+const chapterAt = (month, dayOfMonth, hour = 0) =>
+  Math.floor(Date.UTC(2026, month, dayOfMonth, hour) / 1000)
+
+const storytellerMemories = [
+  // before any chapter: plain month grouping
+  memory({
+    type: 'ZONE',
+    source: 'RECORDED',
+    timestamp: chapterAt(2, 5, 9),
+    location: 'Тирисфальские леса',
+    data: { zoneName: 'Tirisfal Glades' },
+  }),
+  memory({
+    type: 'LEVEL',
+    source: 'RECORDED',
+    timestamp: chapterAt(2, 20, 21),
+    location: 'Серебряный бор',
+    data: { level: 11 },
+  }),
+  // chapter g-1 «Затерянные берега» (closed) — player text, Cyrillic
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chapterAt(3, 2, 19),
+    location: 'Западный берег',
+    favorite: true,
+    chapterId: 'g-1',
+    data: {
+      title: 'Первый костёр на западном берегу',
+      note: 'Волны глушили звуки леса, и огонь казался единственным собеседником.',
+    },
+  }),
+  // equal timestamps inside the chapter: file order must survive
+  memory({
+    type: 'DEATH',
+    source: 'RECORDED',
+    timestamp: chapterAt(3, 18, 12),
+    location: 'Затерянные берега',
+    chapterId: 'g-1',
+    data: { killerName: 'Murloc Tidehunter' },
+  }),
+  memory({
+    type: 'ZONE',
+    source: 'RECORDED',
+    timestamp: chapterAt(3, 18, 12),
+    location: 'Затерянные берега',
+    chapterId: 'g-1',
+    data: { zoneName: 'Lost Coast' },
+  }),
+  // chapter g-2 «Тени Сумеречного леса» (still open — no closedAt)
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chapterAt(4, 3, 22),
+    location: 'Сумеречный лес',
+    chapterId: 'g-2',
+    data: {
+      title: 'Тени между сосен',
+      note: 'Даже полдень здесь звучит как поздний вечер.',
+    },
+  }),
+  // undated but bound: the chapterId binding wins over the missing timestamp
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    chapterId: 'g-2',
+    location: 'Сумеречный лес',
+    data: { title: 'Запись без даты в главе', note: 'Когда именно — неважно: глава своя.' },
+  }),
+  // dangling binding: the chapter is absent — the memory is NOT lost, it falls
+  // back to its month section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chapterAt(4, 25, 18),
+    location: 'Подгород',
+    chapterId: 'g-missing',
+    data: { title: 'Запись без главы', note: 'Глава исчезла из файла, запись — осталась.' },
+  }),
+  // undated and unbound: the trailing undated section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    location: 'Лордерон',
+    data: { title: 'Совсем без даты', note: 'Ни главы, ни числа.' },
+  }),
+]
+
+const storytellerChapters = indexed([
+  {
+    id: 'g-1',
+    title: 'Затерянные берега',
+    description:
+      'Дни, когда карты кончились и начался прибой. Глава о тумане, кострах и тех, кого море не отпустило.\nВторая строка — проверить перенос строк в описании.',
+    startedAt: chapterAt(3, 1),
+    closedAt: chapterAt(3, 30, 23),
+  },
+  {
+    id: 'g-2',
+    title: 'Тени Сумеречного леса',
+    description: 'Открытая глава: закрытия ещё не было.',
+    startedAt: chapterAt(4, 1),
+  },
+  // g-3 carries no memories — an empty author chapter must never render
+  {
+    id: 'g-3',
+    title: 'Пустая глава',
+    description: 'Создана заранее, записей нет.',
+    startedAt: chapterAt(4, 10),
+  },
+])
+
+// ---------------------------------------------------------------------------
+// FJ-WEB-03 review: a REALISTIC chapters character — Гордунни:Хронист. The
+// SavedVariables of the real addon carry NO chapterId on memories: membership
+// is resolved by Chapters.FindForTimestamp intervals. Chapters c:1 (closed
+// June 10 → June 20 12:00) and c:2 (open, July 1). The memories deliberately
+// hit the interval edges: June 10 00:00 == c:1.startedAt (inside), June 20
+// 12:00 == c:1.closedAt (outside — half-open interval), plus the June
+// regression shape: unbound June 2 → chapter → unbound June 25 must never
+// collapse into one June section placed before the chapter.
+// ---------------------------------------------------------------------------
+const chroniclerAt = (month, dayOfMonth, hour = 0, minute = 0) =>
+  Math.floor(Date.UTC(2026, month, dayOfMonth, hour, minute) / 1000)
+
+const chroniclerMemories = [
+  // before any chapter → the first June section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(5, 2, 9),
+    location: 'Подгород',
+    data: { title: 'Двадцатидневка до глав', note: 'Журнал вёлся, глав ещё не было.' },
+  }),
+  // exactly at c:1.startedAt → inside the chapter (startedAt <= timestamp)
+  memory({
+    type: 'ZONE',
+    source: 'RECORDED',
+    timestamp: chroniclerAt(5, 10, 0),
+    location: 'Долина Лок Модан',
+    data: { zoneName: 'Loch Modan' },
+  }),
+  // squarely inside c:1
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(5, 12, 15),
+    location: 'Лок Модан',
+    favorite: true,
+    data: { title: 'Плотина в тумане', note: 'Вода гудела за стеной всю ночь.' },
+  }),
+  // exactly at c:1.closedAt → outside (timestamp < closedAt is false)
+  memory({
+    type: 'DEATH',
+    source: 'RECORDED',
+    timestamp: chroniclerAt(5, 20, 12),
+    location: 'Лок Модан',
+    data: { killerName: 'Kobold Geomancer' },
+  }),
+  // after c:1 closed, before c:2 starts → the second June section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(5, 25, 18),
+    location: 'Тирисфальские леса',
+    data: { title: 'Дорога домой без главы', note: 'Глава закрылась, путь продолжается.' },
+  }),
+  // inside the open chapter c:2
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 5, 10),
+    location: 'Серебряный бор',
+    data: { title: 'После солнцеворота', note: 'Начало длинного июля.' },
+  }),
+  // undated, no binding possible → the trailing undated section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    location: 'Подгород',
+    data: { title: 'Без числа', note: 'Интервал не определить — даты нет.' },
+  }),
+]
+
+const chroniclerChapters = indexed([
+  {
+    id: 'c:1',
+    title: 'Дороги июня',
+    description: 'От стены Стромгарда до плотины Лок Модана — десять дней между двумя столбами дороги.',
+    startedAt: chroniclerAt(5, 10),
+    closedAt: chroniclerAt(5, 20, 12),
+  },
+  {
+    id: 'c:2',
+    title: 'После солнцеворота',
+    description: 'Открытая глава: лето ещё не кончилось.',
+    startedAt: chroniclerAt(6, 1),
+  },
+])
+
+const chaptersDb = {
+  schemaVersion: 3,
+  addonVersion: '0.8.0',
+  characters: {
+    'Гордунни:Сказитель': {
+      createdAt: chapterAt(2, 1, 8),
+      // no stats/recoveredHistory: the deaths fall back to counted DEATH
+      // events and the book gains no archive page — this fixture is about
+      // the chapters
+      // the still-open chapter is editing state; the book does not read it
+      activeChapterID: 'g-2',
+      chapters: storytellerChapters,
+      memories: indexed(storytellerMemories),
+    },
+    // realistic shape: memories carry NO chapterId — the importer must
+    // restore membership from the chapter intervals (FindForTimestamp)
+    'Гордунни:Хронист': {
+      createdAt: chroniclerAt(5, 1, 8),
+      // no stats/recoveredHistory either: the single DEATH event feeds the
+      // counter and the book gains no archive page — chapters only
+      activeChapterID: 'c:2',
+      chapters: chroniclerChapters,
+      memories: indexed(chroniclerMemories),
+    },
+  },
+}
+
+const chaptersLua = [
+  '-- FJ-WEB-03 fixture: author chapters, mixed with month grouping',
+  `ForeverJourneyDB = ${lua(chaptersDb)}`,
+  '',
+].join('\r\n')
+
 mkdirSync(OUT, { recursive: true })
 writeFileSync(resolve(OUT, 'ForeverJourney.lua'), mainLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-straider.lua'), straiderLua, 'utf8')
+writeFileSync(resolve(OUT, 'ForeverJourney-chapters.lua'), chaptersLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-schema2.lua'), schemaTwoLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-otherdb.lua'), otherDbLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-broken.lua'), brokenLua, 'utf8')
 writeFileSync(resolve(OUT, 'ForeverJourney-malicious.lua'), maliciousLua, 'utf8')
-console.log('SavedVariables fixtures written to fixtures/savedvariables/ (6 files)')
+console.log('SavedVariables fixtures written to fixtures/savedvariables/ (7 files)')

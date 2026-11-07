@@ -256,6 +256,18 @@
   font-weight: 600;
 }
 
+/* Author chapter description (FJ-WEB-03) — an epigraph under the chapter
+   title, in the book's own parchment voice: italic, centered, muted. */
+.chapter-head__description {
+  margin: 0.7rem auto 0;
+  max-width: 52ch;
+  font-style: italic;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: #54401f;
+  white-space: pre-line;
+}
+
 .intro-lead {
   font-size: 1.1rem;
   font-style: italic;

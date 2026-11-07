@@ -17,14 +17,17 @@ import {
   type LuaValue,
 } from './luaparse'
 import {
+  MAX_CHAPTERS,
   MAX_MEMORIES,
   MAX_STRING_LENGTH,
+  normalizeChapter,
   toTimestamp,
   type ArchivedMoney,
   type ArchivedProfession,
   type ArchivedZoneVisit,
   type CharacterArchive,
   type Journal,
+  type JournalChapter,
   type JournalMemory,
   type RecoveredHistory,
 } from './journal'
@@ -330,6 +333,9 @@ function toMemory(record: LuaTable): JournalMemory | null {
 
   if (!type && !title && !description && !asText(record.personalNote)) return null
 
+  // the chapter binding is data, kept verbatim like the rest of the player's text
+  const chapterId = asText(record.chapterId).trim()
+
   return {
     type: type || 'MEMORY',
     typeLabel: typeLabel(type || 'MEMORY'),
@@ -340,6 +346,7 @@ function toMemory(record: LuaTable): JournalMemory | null {
     favorite: record.favorite === true,
     ...(timestamp !== undefined ? { timestamp } : {}),
     location: locationText(record.location),
+    ...(chapterId !== '' ? { chapterId } : {}),
   }
 }
 
@@ -417,11 +424,76 @@ export function readSavedVariables(source: Uint8Array | string): SavedVariablesR
 }
 
 /**
+ * `character.chapters` — the player's author chapters (FJ-WEB-03), read with
+ * the same rules the FJBOOK1 validation uses (normalizeChapter), so both
+ * import paths produce the same model. Two shapes are accepted, exactly like
+ * parseVisitedZones: the serializer's positional array (`[1] = { id = … }`)
+ * and a map keyed by the chapter id (`["id"] = { … }`, the record's own id
+ * wins). Damaged records are dropped individually — never their memories —
+ * duplicate ids keep the first occurrence, and the addon's cap of 512 holds
+ * (anything beyond it is corruption; the excess chapters are dropped and
+ * their memories fall back to the chronological grouping).
+ */
+function parseChapters(value: LuaValue | undefined): JournalChapter[] {
+  if (typeof value !== 'object' || value === null) return []
+  const chapters: JournalChapter[] = []
+  const seen = new Set<string>()
+  const add = (record: LuaValue, key: string) => {
+    const table = asTable(record)
+    if (!table) return
+    const withId =
+      typeof table.id === 'string' ? table : { ...table, id: key }
+    const chapter = normalizeChapter(withId)
+    if (chapter === null || seen.has(chapter.id)) return
+    seen.add(chapter.id)
+    chapters.push(chapter)
+  }
+  for (const [key, record] of Object.entries(value)) {
+    // positional keys are array indices, not ids — the record must carry one;
+    // a named key is a chapter id in its own right
+    if (ARRAY_KEY.test(key)) add(record, '')
+    else add(record, key)
+    if (chapters.length >= MAX_CHAPTERS) break
+  }
+  return chapters
+}
+
+/**
+ * Chapters.FindForTimestamp — how the addon itself decides which chapter a
+ * memory belongs to when the file carries no explicit binding: the chapters
+ * are walked from last to first, so with overlapping intervals the LATEST
+ * matching chapter wins. A chapter matches when its half-open interval
+ * contains the timestamp — `startedAt <= timestamp`, closed chapters end at
+ * `timestamp < closedAt`, an open chapter has no upper bound. Adjacent
+ * intervals therefore hand a memory stamped exactly at one chapter's
+ * closedAt to the next chapter.
+ */
+function findChapterForTimestamp(
+  chapters: JournalChapter[],
+  timestamp: number
+): JournalChapter | undefined {
+  for (let i = chapters.length - 1; i >= 0; i--) {
+    const chapter = chapters[i]
+    if (timestamp < chapter.startedAt) continue
+    if (chapter.closedAt !== undefined && timestamp >= chapter.closedAt) continue
+    return chapter
+  }
+  return undefined
+}
+
+/**
  * Converts one character of a parsed SavedVariables into an FJJOURNAL v1
  * journal. Chronological order with a stable original-order tiebreak for
  * equal timestamps; favorites, personal notes and manual texts are preserved
  * verbatim. Level/race/class and play time are not part of SavedVariables —
  * they stay empty and the book hides them instead of guessing.
+ *
+ * Chapter membership follows the addon's own rules: an explicit valid
+ * `memory.chapterId` wins; a memory with no binding is assigned by
+ * Chapters.FindForTimestamp over the character's chapters (an explicit
+ * dangling id is kept as data and never re-resolved). The assignment happens
+ * on the converted model only — the parsed SavedVariables tables are never
+ * rewritten.
  */
 export function buildJournalFromSavedVariables(
   parsed: SavedVariablesOk,
@@ -435,9 +507,17 @@ export function buildJournalFromSavedVariables(
   const rawMemories = memoryArray(record)
   if (rawMemories.length > MAX_MEMORIES) return null
 
+  const chapters = parseChapters(record.chapters)
   const memories = rawMemories
     .map(toMemory)
     .filter((memory): memory is JournalMemory => memory !== null)
+    // no explicit binding → the addon's interval rule (FJ-WEB-03 review):
+    // a fresh object per assignment, the source table stays untouched
+    .map((memory) => {
+      if (memory.chapterId !== undefined || memory.timestamp === undefined) return memory
+      const chapter = findChapterForTimestamp(chapters, memory.timestamp)
+      return chapter ? { ...memory, chapterId: chapter.id } : memory
+    })
 
   // Explicit index tiebreak keeps the file's original order for equal times.
   const ordered = memories
@@ -472,6 +552,7 @@ export function buildJournalFromSavedVariables(
       ...(deaths > 0 || declaredDeaths !== undefined ? { deaths } : {}),
     },
     ...(archive !== undefined ? { archive } : {}),
+    ...(chapters.length > 0 ? { chapters } : {}),
     memories: ordered,
   }
 }

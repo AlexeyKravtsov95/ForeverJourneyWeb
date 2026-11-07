@@ -6,6 +6,7 @@
 // a shrinking book must lose the duplicate page, never the data.
 import { describe, expect, it } from 'vitest'
 import { renderToBuffer } from '@react-pdf/renderer'
+import { renderToString } from 'react-dom/server'
 import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { BookDocument } from './BookDocument'
@@ -15,6 +16,7 @@ import { demoJournal } from '../demo/demoJournal'
 import { strings } from '../i18n'
 import type { Journal } from '../lib/journal'
 import { buildJournalFromSavedVariables, readSavedVariables } from '../lib/savedvariables'
+import Book from '../components/Book'
 
 const fontPath = (name: string) => fileURLToPath(new URL(`./fonts/${name}`, import.meta.url))
 
@@ -226,6 +228,184 @@ describe('BookDocument pages (FJ-WEB-06.1)', () => {
       // the heading appears once — it is not re-rendered per overflow page
       const headingPages = pages.filter((page) => pdfPageContains(page, 'Посещённые локации'))
       expect(headingPages).toHaveLength(1)
+    },
+    RENDER_TIMEOUT
+  )
+})
+
+describe('BookDocument pages — author chapters (FJ-WEB-03)', () => {
+  const STORYTELLER = 'Гордунни:Сказитель'
+  const storytellerJournal = () =>
+    svJournal('ForeverJourney-chapters.lua', STORYTELLER)
+
+  // the merged section sequence: one March month section, two author chapters,
+  // the May month section (dangling binding fell back to it) and the undated
+  // section — the empty chapter g-3 renders nothing
+  const SECTION_LABELS = [
+    'март 2026',
+    'Затерянные берега',
+    'Тени Сумеречного леса',
+    'май 2026',
+    'Воспоминания без даты',
+  ]
+
+  it(
+    'Сказитель (RU): every section starts a fresh page, the description follows the title as text',
+    async () => {
+      const pages = await renderPages(storytellerJournal(), 'ru')
+      const tr = strings.ru
+
+      // cover + intro + five section pages + end page; no archive — the
+      // fixture carries no snapshot, no professions and no tracked money
+      expect(pages).toHaveLength(8)
+
+      // roman numbering continues across the merged sections
+      expect(pdfPageContains(pages[2], 'ГЛАВА I')).toBe(true)
+      expect(pdfPageContains(pages[3], 'ГЛАВА II')).toBe(true)
+      expect(pdfPageContains(pages[4], 'ГЛАВА III')).toBe(true)
+
+      // the closed chapter: title, then the multi-line description right
+      // after it — extractable Cyrillic text, not an image
+      expect(pdfPageContains(pages[3], 'Затерянные берега')).toBe(true)
+      expect(pdfPageContains(pages[3], 'Дни, когда карты кончились и начался прибой')).toBe(true)
+      expect(pdfPageContains(pages[3], 'Вторая строка — проверить перенос строк в описании')).toBe(true)
+      // the open chapter renders the same way
+      expect(pdfPageContains(pages[4], 'Тени Сумеречного леса')).toBe(true)
+      expect(pdfPageContains(pages[4], 'Открытая глава: закрытия ещё не было')).toBe(true)
+
+      // the dangling binding fell back to its month section — not lost
+      expect(pdfPageContains(pages[5], 'май 2026')).toBe(true)
+      expect(pdfPageContains(pages[5], 'Запись без главы')).toBe(true)
+      expect(pdfPageContains(pages[6], tr.undatedChapter)).toBe(true)
+      expect(pdfPageContains(pages[6], 'Совсем без даты')).toBe(true)
+      expect(pdfPageContains(pages[7], tr.endTitle)).toBe(true)
+
+      // the empty author chapter renders nothing anywhere
+      expect(pdfContains(pages, 'Пустая глава')).toBe(false)
+      expect(pdfContains(pages, 'Создана заранее')).toBe(false)
+
+      // every memory survived: all nine titles are extractable text (system
+      // titles in their RU rendering, player text verbatim)
+      for (const title of [
+        'Первый костёр на западном берегу',
+        'Открыта локация: Tirisfal Glades',
+        'Открыта локация: Lost Coast',
+        'Пал в бою — Murloc Tidehunter',
+        'Тени между сосен',
+        'Запись без даты в главе',
+        'Запись без главы',
+        'Совсем без даты',
+        'Уровень повышен до 11',
+      ]) {
+        expect(pdfContains(pages, title)).toBe(true)
+      }
+    },
+    RENDER_TIMEOUT
+  )
+
+  it(
+    'web book and PDF carry the same sections in the same order (parity)',
+    async () => {
+      const journal = storytellerJournal()
+      const html = renderToString(
+        <Book
+          tr={strings.ru}
+          lang="ru"
+          onLangChange={() => undefined}
+          onBack={() => undefined}
+          journal={journal}
+          meta={{ kind: 'savedvariables', schema: 3, memories: 9, archive: false }}
+        />
+      )
+      const pages = await renderPages(journal, 'ru')
+
+      // in the web book the section titles appear in this exact order…
+      const htmlPositions = SECTION_LABELS.map((label) => html.indexOf(label))
+      expect(htmlPositions.every((position) => position >= 0)).toBe(true)
+      expect([...htmlPositions].sort((a, b) => a - b)).toEqual(htmlPositions)
+
+      // …and in the PDF each section opens its own page, in the same order
+      const pdfPages = SECTION_LABELS.map(
+        (label) => pages.findIndex((page) => pdfPageContains(page, label))
+      )
+      expect(pdfPages.every((pageIndex) => pageIndex >= 0)).toBe(true)
+      expect([...pdfPages].sort((a, b) => a - b)).toEqual(pdfPages)
+      expect(new Set(pdfPages).size).toBe(SECTION_LABELS.length)
+
+      // and the player's chapter texts match word for word in both renderings
+      for (const text of ['Затерянные берега', 'Дни, когда карты кончились', 'Тени Сумеречного леса']) {
+        expect(html).toContain(text)
+        expect(pdfContains(pages, text)).toBe(true)
+      }
+    },
+    RENDER_TIMEOUT
+  )
+
+  // ---- FJ-WEB-03 review: interval-resolved membership (no chapterId in the
+  // file) and the month split around an author chapter, in the real PDF ----
+
+  it(
+    'Хронист (RU): realistic SavedVariables without chapterId — June splits around the chapter',
+    async () => {
+      const journal = svJournal('ForeverJourney-chapters.lua', 'Гордунни:Хронист')
+      const html = renderToString(
+        <Book
+          tr={strings.ru}
+          lang="ru"
+          onLangChange={() => undefined}
+          onBack={() => undefined}
+          journal={journal}
+          meta={{ kind: 'savedvariables', schema: 3, memories: 7, archive: false }}
+        />
+      )
+      const pages = await renderPages(journal, 'ru')
+      const tr = strings.ru
+
+      // cover + intro + июнь(I) + «Дороги июня»(II) + июнь(III) +
+      // «После солнцеворота»(IV) + без даты(V) + end — no archive page
+      expect(pages).toHaveLength(8)
+      expect(pdfPageContains(pages[2], 'ГЛАВА I')).toBe(true)
+      expect(pdfPageContains(pages[2], 'июнь 2026')).toBe(true)
+      expect(pdfPageContains(pages[3], 'ГЛАВА II')).toBe(true)
+      expect(pdfPageContains(pages[3], 'Дороги июня')).toBe(true)
+      // the description follows the title as extractable Cyrillic text
+      expect(pdfPageContains(pages[3], 'От стены Стромгарда до плотины Лок Модана')).toBe(true)
+      expect(pdfPageContains(pages[4], 'ГЛАВА III')).toBe(true)
+      expect(pdfPageContains(pages[4], 'июнь 2026')).toBe(true) // the SAME month, its second section
+      expect(pdfPageContains(pages[5], 'ГЛАВА IV')).toBe(true)
+      expect(pdfPageContains(pages[5], 'После солнцеворота')).toBe(true)
+      expect(pdfPageContains(pages[6], tr.undatedChapter)).toBe(true)
+      expect(pdfPageContains(pages[7], tr.endTitle)).toBe(true)
+
+      // nothing lost or duplicated: all seven memories, in both renderings
+      const allTitles = [
+        'Двадцатидневка до глав',
+        'Открыта локация: Loch Modan', // Jun 10 00:00 == startedAt → inside
+        'Плотина в тумане',
+        'Пал в бою — Kobold Geomancer', // Jun 20 12:00 == closedAt → outside
+        'Дорога домой без главы',
+        'Начало длинного июля',
+        'Без числа',
+      ]
+      for (const title of allTitles) {
+        expect(pdfContains(pages, title)).toBe(true)
+        expect(html).toContain(title)
+      }
+
+      // parity: the section sequence in the web book and in the PDF pages
+      // matches, walking past repeated month labels with a cursor
+      const labels = ['июнь 2026', 'Дороги июня', 'июнь 2026', 'После солнцеворота', tr.undatedChapter]
+      let htmlCursor = 0
+      let pageCursor = 0
+      for (const label of labels) {
+        const at = html.indexOf(label, htmlCursor)
+        expect(at).toBeGreaterThanOrEqual(0)
+        expect(at).toBeGreaterThanOrEqual(htmlCursor)
+        htmlCursor = at + label.length
+        const pageIndex = pages.findIndex((page, index) => index >= pageCursor && pdfPageContains(page, label))
+        expect(pageIndex).toBeGreaterThanOrEqual(pageCursor)
+        pageCursor = pageIndex
+      }
     },
     RENDER_TIMEOUT
   )

@@ -4,6 +4,11 @@ export const SUPPORTED_FORMAT_VERSION = 1
 // MAX_BYTES = 3 MiB of JSON; the site accepts exactly the same entry cap.
 export const MAX_MEMORIES = 20_000
 export const MAX_STRING_LENGTH = 20_000
+// Chapters.lua caps the journal at 512 chapters, titles at 160 and
+// descriptions at 1200 UTF-8 bytes; the site accepts exactly the same caps.
+export const MAX_CHAPTERS = 512
+export const MAX_CHAPTER_TITLE_BYTES = 160
+export const MAX_CHAPTER_DESCRIPTION_BYTES = 1200
 
 export interface JournalCharacter {
   name: string
@@ -75,6 +80,22 @@ export interface JournalMemory {
   favorite: boolean
   timestamp?: number
   location: string
+  /** Binding to an author chapter (FJ-WEB-03); dangling ids stay unassigned. */
+  chapterId?: string
+}
+
+/**
+ * An author-created chapter (FJ-WEB-03) — the player's own partition of the
+ * chronicle, exported by the addon alongside the memories. Titles and
+ * descriptions are player text: kept verbatim (never translated), truncated
+ * by the addon's own UTF-8 byte caps. An open chapter simply has no closedAt.
+ */
+export interface JournalChapter {
+  id: string
+  title: string
+  description: string
+  startedAt: number
+  closedAt?: number
 }
 
 /** A profession saved in the historical snapshot; the name is kept as recorded. */
@@ -122,6 +143,8 @@ export interface Journal {
   character: JournalCharacter
   journey: JournalJourney
   memories: JournalMemory[]
+  /** Present only when the export actually carried author chapters (FJ-WEB-03). */
+  chapters?: JournalChapter[]
   /** Present only when the SavedVariables import actually found archive data. */
   archive?: CharacterArchive
 }
@@ -161,10 +184,48 @@ export function toTimestamp(value: unknown): number | undefined {
   return undefined
 }
 
+/**
+ * UTF-8 byte size of a string — the unit the addon's title/description caps
+ * use. Counts code points, so surrogate pairs are never split in half.
+ */
+export function utf8ByteLength(text: string): number {
+  let total = 0
+  for (let i = 0; i < text.length; ) {
+    const code = text.codePointAt(i) as number
+    total += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4
+    i += code > 0xffff ? 2 : 1
+  }
+  return total
+}
+
+/** Truncates to the UTF-8 byte cap at a code-point boundary (Lua's string.sub cuts bytes; we never split a character). */
+export function truncateUtf8Bytes(text: string, maxBytes: number): string {
+  let total = 0
+  let cut = text.length
+  for (let i = 0; i < text.length; ) {
+    const code = text.codePointAt(i) as number
+    const size = code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4
+    if (total + size > maxBytes) {
+      cut = i
+      break
+    }
+    total += size
+    i += code > 0xffff ? 2 : 1
+  }
+  return cut === text.length ? text : text.slice(0, cut)
+}
+
+function asId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed.slice(0, MAX_STRING_LENGTH)
+}
+
 function normalizeMemory(entry: unknown): JournalMemory | null {
   if (typeof entry !== 'object' || entry === null) return null
   const record = entry as Record<string, unknown>
   const timestamp = toTimestamp(record.timestamp)
+  const chapterId = asId(record.chapterId)
   return {
     type: asText(record.type) || 'memory',
     typeLabel: asText(record.typeLabel),
@@ -175,6 +236,42 @@ function normalizeMemory(entry: unknown): JournalMemory | null {
     favorite: record.favorite === true,
     ...(timestamp !== undefined ? { timestamp } : {}),
     location: asText(record.location),
+    // kept even when it dangles — the binding is data, grouping resolves it
+    ...(chapterId !== undefined ? { chapterId } : {}),
+  }
+}
+
+/**
+ * Validates and normalizes one author chapter. A chapter survives only with a
+ * usable id, a non-empty title and a valid start time — anything else is
+ * damaged metadata and the chapter is dropped (its memories are NOT: they fall
+ * back to the chronological grouping). closedAt is kept only when it is valid
+ * and not before startedAt; a broken interval demotes the chapter to open
+ * instead of dropping the player's text. Only these five fields are kept.
+ */
+export function normalizeChapter(entry: unknown): JournalChapter | null {
+  if (typeof entry !== 'object' || entry === null) return null
+  const record = entry as Record<string, unknown>
+  const id = asId(record.id)
+  const title =
+    typeof record.title === 'string'
+      ? truncateUtf8Bytes(record.title.trim(), MAX_CHAPTER_TITLE_BYTES)
+      : ''
+  if (id === undefined || title === '') return null
+  const startedAt = toTimestamp(record.startedAt)
+  if (startedAt === undefined) return null
+  const closedCandidate = toTimestamp(record.closedAt)
+  const closedAt = closedCandidate !== undefined && closedCandidate >= startedAt ? closedCandidate : undefined
+  const description =
+    typeof record.description === 'string'
+      ? truncateUtf8Bytes(record.description.trim(), MAX_CHAPTER_DESCRIPTION_BYTES)
+      : ''
+  return {
+    id,
+    title,
+    description,
+    startedAt,
+    ...(closedAt !== undefined ? { closedAt } : {}),
   }
 }
 
@@ -206,6 +303,26 @@ export function validateJournal(data: unknown): JournalValidation {
     return { ok: false, code: 'INVALID_SCHEMA', detail: `memories exceeds ${MAX_MEMORIES}` }
   }
 
+  // Author chapters (FJ-WEB-03) — optional; the same hard cap as the addon.
+  // Damaged chapters are dropped individually (memories never are), duplicate
+  // ids keep the first occurrence so the grouping stays deterministic.
+  if (root.chapters !== undefined && !Array.isArray(root.chapters)) {
+    return { ok: false, code: 'INVALID_SCHEMA', detail: 'chapters is not an array' }
+  }
+  if (Array.isArray(root.chapters) && root.chapters.length > MAX_CHAPTERS) {
+    return { ok: false, code: 'INVALID_SCHEMA', detail: `chapters exceeds ${MAX_CHAPTERS}` }
+  }
+  const chapters: JournalChapter[] = []
+  if (Array.isArray(root.chapters)) {
+    const seen = new Set<string>()
+    for (const entry of root.chapters) {
+      const chapter = normalizeChapter(entry)
+      if (chapter === null || seen.has(chapter.id)) continue
+      seen.add(chapter.id)
+      chapters.push(chapter)
+    }
+  }
+
   const characterRecord = character as Record<string, unknown>
   const journeyRecord =
     typeof root.journey === 'object' && root.journey !== null
@@ -235,6 +352,7 @@ export function validateJournal(data: unknown): JournalValidation {
     memories: root.memories
       .map(normalizeMemory)
       .filter((memory): memory is JournalMemory => memory !== null),
+    ...(chapters.length > 0 ? { chapters } : {}),
   }
   return { ok: true, journal }
 }

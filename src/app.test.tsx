@@ -666,3 +666,93 @@ describe('GROWTH-01: addon link, own-book note and the Mythweld credit', () => {
     expect(html).toContain('Import Journal')
   })
 })
+
+describe('author chapters (web, FJ-WEB-03)', () => {
+  const STORYTELLER = 'Гордунни:Сказитель'
+  const storytellerJournal = () => {
+    const lua = readFileSync(
+      new URL('../fixtures/savedvariables/ForeverJourney-chapters.lua', import.meta.url),
+      'utf8'
+    )
+    const sv = readSavedVariables(lua)
+    if (sv.status !== 'ok') throw new Error('chapters fixture must parse')
+    const journal = buildJournalFromSavedVariables(sv, STORYTELLER)
+    if (!journal) throw new Error('storyteller journal must build')
+    return journal
+  }
+
+  const renderBook = (journal: Journal, lang: 'en' | 'ru') =>
+    renderToString(
+      <Book
+        tr={strings[lang]}
+        lang={lang}
+        onLangChange={() => undefined}
+        onBack={() => undefined}
+        journal={journal}
+        meta={{ kind: 'savedvariables' as const, schema: 3, memories: 9, archive: false }}
+      />
+    )
+
+  it('renders author chapters with roman numbering and descriptions inside the parchment style', () => {
+    const html = renderBook(storytellerJournal(), 'ru')
+    // roman numbering continues across the merged sections: I = март, II/III = author chapters
+    expect(html).toContain('Глава I')
+    expect(html).toContain('Глава II')
+    expect(html).toContain('Глава III')
+    // the player's titles and multi-line descriptions, verbatim
+    expect(html).toContain('Затерянные берега')
+    expect(html).toContain('Дни, когда карты кончились и начался прибой')
+    expect(html).toContain('Вторая строка — проверить перенос строк в описании')
+    expect(html).toContain('Тени Сумеречного леса')
+    // month sections survive next to the chapters; the empty chapter renders nothing
+    expect(html).toContain('март 2026 г.')
+    expect(html).toContain('май 2026 г.')
+    expect(html).toContain('Воспоминания без даты')
+    expect(html).not.toContain('Пустая глава')
+    // every memory survived the grouping, in its section
+    expect(html).toContain('Первый костёр на западном берегу')
+    expect(html).toContain('Запись без главы') // the dangling binding fell back to its month
+    expect(html).toContain('Совсем без даты')
+    // the book style stays: the description is an epigraph paragraph, not a card
+    expect(html).toContain('chapter-head__description')
+  })
+
+  it('never translates player chapter titles when the reader switches to English', () => {
+    const html = renderBook(storytellerJournal(), 'en')
+    // authored text stays verbatim; only the chrome localizes
+    expect(html).toContain('Затерянные берега')
+    expect(html).toContain('Тени Сумеречного леса')
+    expect(html).toContain('Chapter II')
+    expect(html).toContain('March 2026') // month labels still localize
+    expect(html).toContain('Undated memories')
+  })
+
+  it('builds author chapters from interval-resolved membership with the month split around them', () => {
+    const CHRONICLER = 'Гордунни:Хронист'
+    const lua = readFileSync(
+      new URL('../fixtures/savedvariables/ForeverJourney-chapters.lua', import.meta.url),
+      'utf8'
+    )
+    const sv = readSavedVariables(lua)
+    if (sv.status !== 'ok') throw new Error('chapters fixture must parse')
+    const journal = buildJournalFromSavedVariables(sv, CHRONICLER)
+    if (!journal) throw new Error('chronicler journal must build')
+
+    const html = renderBook(journal, 'ru')
+    // the realistic file: no chapterId anywhere — membership came from the
+    // chapter intervals; June splits into two sections around «Дороги июня»
+    // (each section label renders twice: the <h2> text and its aria-label)
+    expect(html.match(/июнь 2026 г\./g)).toHaveLength(4)
+    expect(html.indexOf('июнь 2026 г.')).toBeLessThan(html.indexOf('Дороги июня'))
+    expect(html.indexOf('Дороги июня')).toBeLessThan(html.lastIndexOf('июнь 2026 г.'))
+    expect(html).toContain('От стены Стромгарда до плотины Лок Модана')
+    expect(html).toContain('После солнцеворота')
+    expect(html).toContain('Воспоминания без даты')
+    // all seven memories, in their resolved sections
+    expect(html).toContain('Двадцатидневка до глав')
+    expect(html).toContain('Плотина в тумане')
+    expect(html).toContain('Дорога домой без главы')
+    expect(html).toContain('После солнцеворота') // the July memory title matches the chapter title
+    expect(html).toContain('Без числа')
+  })
+})

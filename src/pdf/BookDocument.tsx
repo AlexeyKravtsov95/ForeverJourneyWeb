@@ -54,6 +54,19 @@ const styles = StyleSheet.create({
     marginTop: 3,
     marginBottom: 4,
   },
+  // author chapter description — the epigraph under the title, mirroring the
+  // web .chapter-head__description (italic, centered, muted)
+  chapterDescription: {
+    fontFamily: BOOK_FONT,
+    fontSize: 10.5,
+    fontStyle: 'italic',
+    color: '#54401f',
+    lineHeight: 1.6,
+    textAlign: 'center',
+    marginHorizontal: 34,
+    marginTop: 4,
+    marginBottom: 2,
+  },
 
   // ---------- cover ----------
   coverPage: { backgroundColor: '#271a10', color: '#e6cf9a' },
@@ -687,12 +700,15 @@ function MemoryEntryView({
 
 function ChapterPage({
   label,
+  description,
   roman,
   memories,
   tr,
   lang,
 }: {
   label: string
+  /** Author chapter description (FJ-WEB-03) — an epigraph under the title. */
+  description?: string
   roman: string
   memories: JournalMemory[]
   tr: Strings
@@ -705,6 +721,9 @@ function ChapterPage({
         <Divider width={170} />
         <Text style={styles.chapterKicker}>{fmt(tr.chapterKicker, { roman }).toUpperCase()}</Text>
         <Text style={styles.chapterTitle}>{label}</Text>
+        {description ? (
+          <MultilineText text={description} style={styles.chapterDescription} />
+        ) : null}
         <Divider width={170} />
       </View>
       {memories.map((memory, index) => (
@@ -721,7 +740,7 @@ function ChapterPage({
 }
 
 export function BookDocument({ journal, tr, lang }: BookDocumentProps) {
-  const chapters = buildChapters(journal.memories, lang, tr.undatedChapter)
+  const chapters = buildChapters(journal.memories, lang, tr.undatedChapter, journal.chapters ?? [])
 
   return (
     <Document
@@ -743,6 +762,7 @@ export function BookDocument({ journal, tr, lang }: BookDocumentProps) {
           <ChapterPage
             key={chapter.key}
             label={chapter.label}
+            description={chapter.description}
             roman={toRoman(index + 1)}
             memories={chapter.memories}
             tr={tr}
