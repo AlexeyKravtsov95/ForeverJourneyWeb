@@ -232,6 +232,51 @@ describe('importJournal — happy paths', () => {
     if (result.status === 'ok') expect(result.journal.character.name).toBe('Громозека')
   })
 
+  it('round-trips author chapters and memory bindings through FJBOOK1 (FJ-WEB-03)', () => {
+    const withChapters: Journal = {
+      ...cyrillicJournal,
+      chapters: [
+        {
+          id: 'g-1',
+          title: 'Затерянные берега',
+          description: 'Дни, когда карты кончились.',
+          startedAt: 1_769_900_000,
+          closedAt: 1_770_500_000,
+        },
+        { id: 'g-2', title: 'Тени Сумеречного леса', description: '', startedAt: 1_770_600_000 },
+      ],
+      memories: cyrillicJournal.memories.map((memory, index) => ({
+        ...memory,
+        chapterId: index < 2 ? 'g-1' : undefined,
+      })),
+    }
+    const result = importJournal(
+      encodeJournalCode(withChapters, { partSize: 300, checksumStyle: 'hex-upper' })
+    )
+    expect(result.status).toBe('ok')
+    if (result.status === 'ok') {
+      // seconds normalize to milliseconds, exactly like memory timestamps;
+      // the open chapter keeps no closedAt key at all
+      expect(result.journal.chapters).toEqual([
+        {
+          id: 'g-1',
+          title: 'Затерянные берега',
+          description: 'Дни, когда карты кончились.',
+          startedAt: 1_769_900_000_000,
+          closedAt: 1_770_500_000_000,
+        },
+        {
+          id: 'g-2',
+          title: 'Тени Сумеречного леса',
+          description: '',
+          startedAt: 1_770_600_000_000,
+        },
+      ])
+      expect(result.journal.memories[0].chapterId).toBe('g-1')
+      expect(result.journal.memories[2].chapterId).toBeUndefined()
+    }
+  })
+
   it('imports an empty journal', () => {
     const empty = { ...cyrillicJournal, memories: [] }
     const result = importJournal(encodeJournalCode(empty, { partSize: 10_000 }))

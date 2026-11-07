@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { toTimestamp, validateJournal } from './journal'
+import {
+  MAX_CHAPTER_DESCRIPTION_BYTES,
+  MAX_CHAPTER_TITLE_BYTES,
+  toTimestamp,
+  truncateUtf8Bytes,
+  utf8ByteLength,
+  validateJournal,
+} from './journal'
 
 const minimal = {
   format: 'FJJOURNAL',
@@ -138,5 +145,181 @@ describe('validateJournal', () => {
     })
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.journal.archive).toBeUndefined()
+  })
+})
+
+describe('author chapters (FJ-WEB-03)', () => {
+  const chapter = (overrides: Record<string, unknown> = {}) => ({
+    id: 'g-1',
+    title: 'Затерянные берега',
+    description: 'Дни, когда карты кончились.',
+    startedAt: 1_775_001_600,
+    ...overrides,
+  })
+
+  it('keeps a closed chapter and normalizes its times to milliseconds', () => {
+    const result = validateJournal({
+      ...minimal,
+      chapters: [chapter({ closedAt: 1_777_590_000 })],
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.journal.chapters).toEqual([
+        {
+          id: 'g-1',
+          title: 'Затерянные берега',
+          description: 'Дни, когда карты кончились.',
+          startedAt: 1_775_001_600_000,
+          closedAt: 1_777_590_000_000,
+        },
+      ])
+    }
+  })
+
+  it('keeps an unclosed chapter without closedAt', () => {
+    const result = validateJournal({ ...minimal, chapters: [chapter()] })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.journal.chapters).toHaveLength(1)
+      expect(result.journal.chapters?.[0].closedAt).toBeUndefined()
+    }
+  })
+
+  it('treats an interval that closes before it starts as open (broken closedAt dropped, chapter kept)', () => {
+    const result = validateJournal({
+      ...minimal,
+      chapters: [chapter({ closedAt: 1_000 })],
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.journal.chapters?.[0].closedAt).toBeUndefined()
+  })
+
+  it('drops damaged chapters but never their memories', () => {
+    const damaged = [
+      chapter({ id: '   ' }), // id of spaces
+      chapter({ id: 42, title: 'id не строка' }),
+      chapter({ title: '' }), // empty title
+      chapter({ title: '   ' }), // title of spaces
+      chapter({ startedAt: 'nope' }), // no valid start
+      chapter({ startedAt: 0 }), // unix zero is not a time
+      'not an object',
+      null,
+    ]
+    const result = validateJournal({
+      ...minimal,
+      chapters: damaged,
+      memories: [
+        { type: 'note', title: 'в потерянной главе', chapterId: 'g-1' },
+        { type: 'note', title: 'без главы' },
+      ],
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.journal.chapters).toBeUndefined()
+      // the memories survive; a dangling binding is data, not an error
+      expect(result.journal.memories).toHaveLength(2)
+      expect(result.journal.memories[0].chapterId).toBe('g-1')
+    }
+  })
+
+  it('keeps the first chapter when ids repeat (deterministic dedupe)', () => {
+    const result = validateJournal({
+      ...minimal,
+      chapters: [chapter({ title: 'Первая' }), chapter({ title: 'Вторая' })],
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.journal.chapters).toHaveLength(1)
+      expect(result.journal.chapters?.[0].title).toBe('Первая')
+    }
+  })
+
+  it('rejects more than MAX_CHAPTERS chapters (Chapters.lua cap = 512)', () => {
+    const chapters = Array.from({ length: 513 }, (_, index) =>
+      chapter({ id: `g-${index}`, title: `Глава ${index}` })
+    )
+    expect(validateJournal({ ...minimal, chapters })).toMatchObject({
+      ok: false,
+      code: 'INVALID_SCHEMA',
+    })
+  })
+
+  it('rejects a chapters field that is not an array', () => {
+    expect(validateJournal({ ...minimal, chapters: { 'g-1': chapter() } })).toMatchObject({
+      ok: false,
+      code: 'INVALID_SCHEMA',
+    })
+  })
+
+  it('stores no chapters field at all for old exports and empty arrays', () => {
+    const legacy = validateJournal(minimal)
+    expect(legacy.ok).toBe(true)
+    if (legacy.ok) expect('chapters' in legacy.journal).toBe(false)
+
+    const empty = validateJournal({ ...minimal, chapters: [] })
+    expect(empty.ok).toBe(true)
+    if (empty.ok) expect('chapters' in empty.journal).toBe(false)
+  })
+
+  it('keeps exactly the five known fields — unknown chapter fields are not saved', () => {
+    const result = validateJournal({
+      ...minimal,
+      chapters: [chapter({ color: 'red', order: 7, closedAt: null })],
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      // closedAt: null is not a time — the chapter stays open, and the null
+      // itself is not kept either
+      expect(Object.keys(result.journal.chapters?.[0] ?? {}).sort()).toEqual([
+        'description',
+        'id',
+        'startedAt',
+        'title',
+      ])
+      expect(result.journal.chapters?.[0]).not.toHaveProperty('color')
+    }
+  })
+
+  it('truncates titles to 160 and descriptions to 1200 UTF-8 bytes without splitting characters', () => {
+    // 'д' is 2 UTF-8 bytes: 81 'д' = 162 bytes → capped at 160 = 80 'д'
+    const longTitle = 'д'.repeat(81)
+    const longDescription = 'ж'.repeat(601) // 1202 bytes → 600 survive
+    expect(utf8ByteLength(longTitle)).toBe(162)
+    const result = validateJournal({
+      ...minimal,
+      chapters: [chapter({ title: longTitle, description: longDescription })],
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      const kept = result.journal.chapters?.[0]
+      expect(kept?.title).toBe('д'.repeat(80))
+      expect(utf8ByteLength(kept?.title ?? '')).toBe(MAX_CHAPTER_TITLE_BYTES)
+      expect(kept?.description).toBe('ж'.repeat(600))
+      expect(utf8ByteLength(kept?.description ?? '')).toBe(MAX_CHAPTER_DESCRIPTION_BYTES)
+    }
+  })
+
+  it('truncates emoji (4-byte characters) whole, never a half surrogate', () => {
+    const withEmoji = '🌊'.repeat(41) // 164 bytes → 40 emoji (160 bytes) survive
+    expect(truncateUtf8Bytes(withEmoji, MAX_CHAPTER_TITLE_BYTES)).toBe('🌊'.repeat(40))
+    // a 2-byte character before a 4-byte one: 2+2+4 = 8 bytes fit exactly
+    expect(truncateUtf8Bytes('аб🌊г', 8)).toBe('аб🌊')
+    expect(truncateUtf8Bytes('аб🌊г', 7)).toBe('аб')
+  })
+
+  it('keeps a memory chapterId binding and drops an empty one', () => {
+    const result = validateJournal({
+      ...minimal,
+      chapters: [chapter()],
+      memories: [
+        { type: 'note', title: 'в главе', chapterId: ' g-1 ' },
+        { type: 'note', title: 'пустая связь', chapterId: '   ' },
+      ],
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.journal.memories[0].chapterId).toBe('g-1')
+      expect(result.journal.memories[1].chapterId).toBeUndefined()
+    }
   })
 })

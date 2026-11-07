@@ -1084,6 +1084,153 @@ describe('economy & quest registry import (FJ-WEB-07)', () => {
   })
 })
 
+describe('author chapters import (FJ-WEB-03)', () => {
+  const CHAPTERS_FIXTURE = 'ForeverJourney-chapters.lua'
+  const STORYTELLER = 'Гордунни:Сказитель'
+
+  const storytellerJournal = () => {
+    const sv = mustRead(fixture(CHAPTERS_FIXTURE))
+    const journal = buildJournalFromSavedVariables(sv, STORYTELLER)
+    if (!journal) throw new Error('storyteller journal must build')
+    return journal
+  }
+
+  it('parses character.chapters with the same rules as FJBOOK1 (times → ms)', () => {
+    const journal = storytellerJournal()
+    expect(journal.chapters).toEqual([
+      {
+        id: 'g-1',
+        title: 'Затерянные берега',
+        description:
+          'Дни, когда карты кончились и начался прибой. Глава о тумане, кострах и тех, кого море не отпустило.\nВторая строка — проверить перенос строк в описании.',
+        startedAt: 1_775_001_600_000,
+        closedAt: 1_777_590_000_000,
+      },
+      {
+        id: 'g-2',
+        title: 'Тени Сумеречного леса',
+        description: 'Открытая глава: закрытия ещё не было.',
+        startedAt: 1_777_593_600_000,
+      },
+      {
+        id: 'g-3',
+        title: 'Пустая глава',
+        description: 'Создана заранее, записей нет.',
+        startedAt: 1_778_371_200_000,
+      },
+    ])
+  })
+
+  it('carries memory chapterId bindings and ignores activeChapterID (editing state, not book data)', () => {
+    const journal = storytellerJournal()
+    expect(journal.memories.map((m) => m.chapterId ?? null)).toEqual([
+      null, // March ZONE — before any chapter
+      null, // March LEVEL
+      'g-1',
+      'g-1',
+      'g-1',
+      'g-2',
+      'g-missing', // dangling binding is kept as data
+      'g-2', // undated but bound — the binding wins (sorted last)
+      null, // undated and unbound
+    ])
+    // activeChapterID never leaks into the model
+    expect(JSON.stringify(journal)).not.toContain('activeChapterID')
+  })
+
+  it('feeds buildChapters exactly like an FJBOOK1 journal: months and author chapters merged', () => {
+    const journal = storytellerJournal()
+    const chapters = buildChapters(journal.memories, 'ru', strings.ru.undatedChapter, journal.chapters)
+    expect(chapters.map((c) => c.label)).toEqual([
+      'март 2026 г.',
+      'Затерянные берега',
+      'Тени Сумеречного леса',
+      'май 2026 г.',
+      'Воспоминания без даты',
+    ])
+    // the closed chapter holds its three memories, equal timestamps in file order
+    expect(chapters[1].description).toContain('Вторая строка')
+    expect(chapters[1].memories.map((m) => m.title || m.type)).toEqual([
+      'Первый костёр на западном берегу',
+      'Fell in battle — Murloc Tidehunter',
+      'Discovered Lost Coast',
+    ])
+    // the open chapter holds both its memories, the undated bound one included
+    expect(chapters[2].memories).toHaveLength(2)
+    // the dangling binding fell back to its month section — not lost
+    expect(chapters[3].memories.map((m) => m.title)).toEqual(['Запись без главы'])
+    expect(chapters[4].memories.map((m) => m.title)).toEqual(['Совсем без даты'])
+  })
+
+  it('accepts a map keyed by the chapter id when records carry no id of their own', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:S"] = {',
+      '\t\t\t["chapters"] = {',
+      '\t\t\t\t["g-9"] = { ["title"] = "Карта", ["description"] = "Ключ как id.", ["startedAt"] = 1770000000 },',
+      '\t\t\t\t["g-1"] = { ["id"] = "g-7", ["title"] = "Своё имя", ["startedAt"] = 1770000001 },',
+      '\t\t\t},',
+      '\t\t\t["memories"] = { { ["type"] = "ZONE", ["chapterId"] = "g-9" } },',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:S')
+    expect(journal?.chapters).toEqual([
+      { id: 'g-9', title: 'Карта', description: 'Ключ как id.', startedAt: 1_770_000_000_000 },
+      // the record's own id wins over the map key
+      { id: 'g-7', title: 'Своё имя', description: '', startedAt: 1_770_000_001_000 },
+    ])
+    expect(journal?.memories[0].chapterId).toBe('g-9')
+  })
+
+  it('drops damaged chapters individually and caps the list at 512 — memories are never lost', () => {
+    const chaptersLua = [
+      // valid
+      '{ ["id"] = "ok", ["title"] = "Живая", ["startedAt"] = 1770000000 },',
+      // damaged: no title, no start, junk entry
+      '{ ["id"] = "no-title", ["startedAt"] = 1770000000 },',
+      '{ ["id"] = "no-start", ["title"] = "Без начала" },',
+      '"junk",',
+      // duplicates: first wins
+      '{ ["id"] = "dup", ["title"] = "Первая", ["startedAt"] = 1770000001 },',
+      '{ ["id"] = "dup", ["title"] = "Вторая", ["startedAt"] = 1770000002 },',
+    ]
+    const build = (extra: string[] = []) => {
+      const source = [
+        'ForeverJourneyDB = {',
+        '\t["schemaVersion"] = 3,',
+        '\t["characters"] = {',
+        '\t\t["R:S"] = {',
+        `\t\t\t["chapters"] = { ${[...chaptersLua, ...extra].join(' ')} },`,
+        '\t\t\t["memories"] = { { ["type"] = "ZONE", ["chapterId"] = "no-title" } },',
+        '\t\t},',
+        '\t},',
+        '}',
+      ].join('\n')
+      const sv = mustRead(source)
+      return buildJournalFromSavedVariables(sv, 'R:S')
+    }
+    const journal = build()
+    expect(journal?.chapters).toEqual([
+      { id: 'ok', title: 'Живая', description: '', startedAt: 1_770_000_000_000 },
+      { id: 'dup', title: 'Первая', description: '', startedAt: 1_770_000_001_000 },
+    ])
+    // the memory pointing at the dropped chapter survives, unassigned
+    expect(journal?.memories).toHaveLength(1)
+
+    // 513 more valid chapters: 2 + 513 = 515 valid, the cap keeps 512
+    const overflow = Array.from(
+      { length: 513 },
+      (_, index) => `{ ["id"] = "x${index}", ["title"] = "Г${index}", ["startedAt"] = ${1_770_010_000 + index} },`
+    )
+    const capped = build(overflow)
+    expect(capped?.chapters).toHaveLength(512)
+  })
+})
+
 describe('regression guards', () => {
   it('keeps timestamps in the journal model as normalized milliseconds', () => {
     const sv = mustRead(fixture(MAIN))
