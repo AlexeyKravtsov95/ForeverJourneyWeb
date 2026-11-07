@@ -1328,7 +1328,7 @@ describe('author chapters import (FJ-WEB-03)', () => {
     expect(journal?.memories.map((m) => m.chapterId)).toEqual(['c:1', 'c:2', 'c:2'])
   })
 
-  it('overlapping open chapters resolve to the first match in file order (deterministic)', () => {
+  it('overlapping open chapters resolve to the LAST match — the addon walks the list backwards', () => {
     const source = [
       'ForeverJourneyDB = {',
       '\t["schemaVersion"] = 3,',
@@ -1339,9 +1339,9 @@ describe('author chapters import (FJ-WEB-03)', () => {
       '\t\t\t\t{ ["id"] = "c:2", ["title"] = "Поздняя", ["startedAt"] = 1780646400 },',
       '\t\t\t},',
       '\t\t\t["memories"] = {',
-      // after both starts — both intervals contain it; file order decides
+      // after both starts — both intervals contain it; the later chapter wins
       '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1780700000 },',
-      // after only the first start
+      // after only the first start — only c:1 can match
       '\t\t\t\t{ ["type"] = "ZONE", ["timestamp"] = 1780500000 },',
       '\t\t\t},',
       '\t\t},',
@@ -1349,7 +1349,9 @@ describe('author chapters import (FJ-WEB-03)', () => {
       '}',
     ].join('\n')
     const journal = buildJournalFromSavedVariables(mustRead(source), 'R:S')
-    expect(journal?.memories.map((m) => m.chapterId)).toEqual(['c:1', 'c:1'])
+    // chronological order: the earlier memory (only c:1 matches) first, then
+    // the later one (both match — the later chapter c:2 wins)
+    expect(journal?.memories.map((m) => m.chapterId)).toEqual(['c:1', 'c:2'])
   })
 
   it('never rewrites the parsed SavedVariables: a second conversion is identical', () => {

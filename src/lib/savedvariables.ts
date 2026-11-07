@@ -460,17 +460,20 @@ function parseChapters(value: LuaValue | undefined): JournalChapter[] {
 
 /**
  * Chapters.FindForTimestamp — how the addon itself decides which chapter a
- * memory belongs to when the file carries no explicit binding: the first
- * chapter (in saved order) whose half-open interval contains the timestamp —
- * `startedAt <= timestamp`, closed chapters end at `timestamp < closedAt`, an
- * open chapter has no upper bound. Adjacent intervals therefore hand a
- * memory stamped exactly at one chapter's closedAt to the next chapter.
+ * memory belongs to when the file carries no explicit binding: the chapters
+ * are walked from last to first, so with overlapping intervals the LATEST
+ * matching chapter wins. A chapter matches when its half-open interval
+ * contains the timestamp — `startedAt <= timestamp`, closed chapters end at
+ * `timestamp < closedAt`, an open chapter has no upper bound. Adjacent
+ * intervals therefore hand a memory stamped exactly at one chapter's
+ * closedAt to the next chapter.
  */
 function findChapterForTimestamp(
   chapters: JournalChapter[],
   timestamp: number
 ): JournalChapter | undefined {
-  for (const chapter of chapters) {
+  for (let i = chapters.length - 1; i >= 0; i--) {
+    const chapter = chapters[i]
     if (timestamp < chapter.startedAt) continue
     if (chapter.closedAt !== undefined && timestamp >= chapter.closedAt) continue
     return chapter
