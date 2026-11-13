@@ -410,3 +410,84 @@ describe('BookDocument pages — author chapters (FJ-WEB-03)', () => {
     RENDER_TIMEOUT
   )
 })
+
+// ---- FJ-WEB-08: chapterId = false (addon 0.9.0 mass moves) — the excluded
+// memories must stay in their month sections in the real PDF ----
+
+describe('BookDocument pages — chapter exclusions (FJ-WEB-08)', () => {
+  it(
+    'Архивист (RU): excluded memories stay in month sections, web and PDF agree',
+    async () => {
+      const journal = svJournal('ForeverJourney-chapters.lua', 'Гордунни:Архивист')
+      const html = renderToString(
+        <Book
+          tr={strings.ru}
+          lang="ru"
+          onLangChange={() => undefined}
+          onBack={() => undefined}
+          journal={journal}
+          meta={{ kind: 'savedvariables', schema: 3, memories: 8, archive: false }}
+        />
+      )
+      const pages = await renderPages(journal, 'ru')
+      const tr = strings.ru
+
+      // cover + intro + [июль, Первый свод, июль, Второй свод, июль] + end
+      expect(pages).toHaveLength(8)
+      expect(pdfPageContains(pages[2], 'ГЛАВА I')).toBe(true)
+      expect(pdfPageContains(pages[3], 'ГЛАВА II')).toBe(true)
+      expect(pdfPageContains(pages[3], 'Первый свод')).toBe(true)
+      expect(pdfPageContains(pages[4], 'ГЛАВА III')).toBe(true)
+      expect(pdfPageContains(pages[5], 'ГЛАВА IV')).toBe(true)
+      expect(pdfPageContains(pages[5], 'Второй свод')).toBe(true)
+      expect(pdfPageContains(pages[6], 'ГЛАВА V')).toBe(true)
+      expect(pdfPageContains(pages[7], tr.endTitle)).toBe(true)
+
+      // the July 3 exclusion (timestamp inside a:1's interval) sits in the
+      // middle month section together with the second exclusion and the
+      // dangling binding — never inside «Первый свод»
+      expect(pdfPageContains(pages[4], 'Вырезано из свода')).toBe(true)
+      expect(pdfPageContains(pages[4], 'Ссылка в никуда')).toBe(true)
+      expect(pdfPageContains(pages[4], 'Тоже вырезано')).toBe(true)
+      expect(pdfPageContains(pages[3], 'Вырезано из свода')).toBe(false)
+      // the re-bound memory joined «Второй свод» despite its earlier timestamp
+      expect(pdfPageContains(pages[5], 'Перенесено вперёд')).toBe(true)
+      // the exclusion from the OPEN chapter was not captured by it
+      expect(pdfPageContains(pages[6], 'Вырезано из открытой')).toBe(true)
+      expect(pdfPageContains(pages[5], 'Вырезано из открытой')).toBe(false)
+
+      // every memory of the mass move is present in both renderings
+      for (const title of [
+        'До всяких сводов',
+        'Вырезано из свода',
+        'Само легло в свод',
+        'Перенесено вперёд',
+        'Ссылка в никуда',
+        'Тоже вырезано',
+        'Вырезано из открытой',
+        'Хвост открытого свода',
+      ]) {
+        expect(pdfContains(pages, title)).toBe(true)
+        expect(html).toContain(title)
+      }
+
+      // parity: the section sequence in the web book and in the PDF pages
+      // matches, walking past the repeated July labels with a cursor
+      const labels = ['июль 2026', 'Первый свод', 'июль 2026', 'Второй свод', 'июль 2026']
+      let htmlCursor = 0
+      let pageCursor = 0
+      for (const label of labels) {
+        const at = html.indexOf(label, htmlCursor)
+        expect(at).toBeGreaterThanOrEqual(0)
+        expect(at).toBeGreaterThanOrEqual(htmlCursor)
+        htmlCursor = at + label.length
+        const pageIndex = pages.findIndex(
+          (page, index) => index >= pageCursor && pdfPageContains(page, label)
+        )
+        expect(pageIndex).toBeGreaterThanOrEqual(pageCursor)
+        pageCursor = pageIndex
+      }
+    },
+    RENDER_TIMEOUT
+  )
+})

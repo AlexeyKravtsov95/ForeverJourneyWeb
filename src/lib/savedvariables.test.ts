@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildJournalFromSavedVariables, readSavedVariables } from './savedvariables'
+import { validateJournal, type JournalMemory } from './journal'
 import { buildArchiveView } from './archive'
 import { buildChapters } from './chapters'
 import { localizeMemory } from './localize'
@@ -1361,6 +1362,188 @@ describe('author chapters import (FJ-WEB-03)', () => {
     expect(first).toEqual(second)
     // and the interval resolution produced real bindings both times
     expect(first?.memories.filter((m) => m.chapterId !== undefined)).toHaveLength(3)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// FJ-WEB-08: chapterId = false — the addon 0.9.0 mass-move shape. The fixture
+// character Гордунни:Архивист mixes explicit exclusions, re-bindings to other
+// chapters, a dangling id and automatic bindings inside ONE calendar month,
+// with chapters a:1 (closed July 2 → July 15 12:00) and a:2 (open, July 20).
+// ---------------------------------------------------------------------------
+describe('chapter exclusions — chapterId = false after 0.9.0 mass moves (FJ-WEB-08)', () => {
+  const CHAPTERS_FIXTURE = 'ForeverJourney-chapters.lua'
+  const ARCHIVIST = 'Гордунни:Архивист'
+
+  const archivistJournal = () => {
+    const sv = mustRead(fixture(CHAPTERS_FIXTURE))
+    const journal = buildJournalFromSavedVariables(sv, ARCHIVIST)
+    if (!journal) throw new Error('archivist journal must build')
+    return journal
+  }
+
+  it('keeps chapterId = false distinct from a missing field — the interval rule never fires for it', () => {
+    const journal = archivistJournal()
+    expect(journal.memories.map((m) => m.title)).toEqual([
+      'До всяких сводов',
+      'Вырезано из свода', // excluded, timestamp inside a:1
+      'Само легло в свод', // no chapterId → interval rule assigns a:1
+      'Перенесено вперёд', // re-bound to a:2 by the mass move
+      'Ссылка в никуда', // dangling id
+      'Тоже вырезано', // excluded, inside a:1
+      'Вырезано из открытой', // excluded, inside the OPEN chapter a:2
+      'Хвост открытого свода', // no chapterId → interval rule assigns a:2
+    ])
+    expect(
+      journal.memories.map((m) => [m.chapterId ?? null, m.excludedFromChapters === true])
+    ).toEqual([
+      [null, false], // July 1 — before any chapter
+      [null, true], // July 3 — excluded inside a:1
+      ['a:1', false], // July 5 — automatic by interval
+      ['a:2', false], // July 7 — explicit binding wins over time
+      ['ghost', false], // July 9 — dangling, never re-resolved
+      [null, true], // July 12 — excluded inside a:1
+      [null, true], // July 25 — excluded inside open a:2
+      ['a:2', false], // July 27 — automatic by interval
+    ])
+  })
+
+  it('the contrast pair: an excluded memory and an automatic one, timestamps inside the SAME chapter', () => {
+    const journal = archivistJournal()
+    const a1 = journal.chapters?.find((c) => c.id === 'a:1')
+    expect(a1).toBeDefined()
+    for (const title of ['Вырезано из свода', 'Само легло в свод']) {
+      const memory = journal.memories.find((m) => m.title === title)
+      // both timestamps fall inside a:1's half-open interval…
+      expect(memory?.timestamp).toBeGreaterThanOrEqual(a1!.startedAt)
+      expect(memory?.timestamp).toBeLessThan(a1!.closedAt as number)
+    }
+    // …but only the memory WITHOUT the saved false receives the binding
+    const excluded = journal.memories.find((m) => m.title === 'Вырезано из свода')
+    const automatic = journal.memories.find((m) => m.title === 'Само легло в свод')
+    expect(excluded?.chapterId).toBeUndefined()
+    expect(excluded?.excludedFromChapters).toBe(true)
+    expect(automatic?.chapterId).toBe('a:1')
+  })
+
+  it('an explicit re-binding to another chapter wins regardless of the timestamp', () => {
+    const journal = archivistJournal()
+    const a1 = journal.chapters?.find((c) => c.id === 'a:1')
+    const a2 = journal.chapters?.find((c) => c.id === 'a:2')
+    const moved = journal.memories.find((m) => m.title === 'Перенесено вперёд')
+    // the timestamp sits inside a:1 and BEFORE a:2 even starts…
+    expect(moved?.timestamp).toBeGreaterThanOrEqual(a1!.startedAt)
+    expect(moved?.timestamp).toBeLessThan(a1!.closedAt as number)
+    expect(moved?.timestamp).toBeLessThan(a2!.startedAt)
+    // …yet the saved binding to a:2 is what the book uses
+    expect(moved?.chapterId).toBe('a:2')
+  })
+
+  it('an unknown chapterId is kept as data and never re-resolved by the intervals', () => {
+    const journal = archivistJournal()
+    const dangling = journal.memories.find((m) => m.title === 'Ссылка в никуда')
+    expect(dangling?.chapterId).toBe('ghost')
+    expect(dangling?.excludedFromChapters).toBeUndefined()
+  })
+
+  it('a mass move loses nothing: count, order, texts, notes and favorites survive', () => {
+    const journal = archivistJournal()
+    expect(journal.memories).toHaveLength(8)
+    // chronological order preserved (all eight carry timestamps)
+    const stamps = journal.memories.map((m) => m.timestamp as number)
+    expect([...stamps].sort((a, b) => a - b)).toEqual(stamps)
+    // player text, note and favorite kept verbatim on an excluded memory
+    const excluded = journal.memories.find((m) => m.title === 'Вырезано из свода')
+    expect(excluded?.favorite).toBe(true)
+    expect(excluded?.description).toBe('Игрок исключил запись из всех глав.')
+    expect(excluded?.personalNote).toBe('Вычищено из главы после большой перенумерации.')
+    // every memory of the mass move is still there, exactly once
+    for (const title of [
+      'До всяких сводов',
+      'Вырезано из свода',
+      'Само легло в свод',
+      'Перенесено вперёд',
+      'Ссылка в никуда',
+      'Тоже вырезано',
+      'Вырезано из открытой',
+      'Хвост открытого свода',
+    ]) {
+      expect(journal.memories.filter((m) => m.title === title)).toHaveLength(1)
+    }
+  })
+
+  it('excluded memories group into the month sections between the author chapters', () => {
+    const journal = archivistJournal()
+    const chapters = buildChapters(
+      journal.memories,
+      'ru',
+      strings.ru.undatedChapter,
+      journal.chapters
+    )
+    // the two author chapters and the exclusions split July into three month
+    // sections around them
+    expect(chapters.map((c) => c.label)).toEqual([
+      'июль 2026 г.',
+      'Первый свод',
+      'июль 2026 г.',
+      'Второй свод',
+      'июль 2026 г.',
+    ])
+    expect(chapters[0].memories.map((m) => m.title)).toEqual(['До всяких сводов'])
+    // the automatic memory — and ONLY it — entered a:1
+    expect(chapters[1].memories.map((m) => m.title)).toEqual(['Само легло в свод'])
+    // both a:1 exclusions and the dangling binding stay in the month section
+    expect(chapters[2].memories.map((m) => m.title)).toEqual([
+      'Вырезано из свода',
+      'Ссылка в никуда',
+      'Тоже вырезано',
+    ])
+    // the re-bound memory joined a:2 despite its earlier timestamp
+    expect(chapters[3].memories.map((m) => m.title)).toEqual([
+      'Перенесено вперёд',
+      'Хвост открытого свода',
+    ])
+    // the exclusion from the OPEN chapter keeps its own trailing month section
+    expect(chapters[4].memories.map((m) => m.title)).toEqual(['Вырезано из открытой'])
+    // nothing lost, nothing duplicated
+    expect(chapters.flatMap((c) => c.memories)).toHaveLength(8)
+  })
+
+  it('grouping does not depend on the marker — an FJJOURNAL round-trip groups identically', () => {
+    const journal = archivistJournal()
+    const roundTrip = validateJournal(JSON.parse(JSON.stringify(journal)))
+    expect(roundTrip.ok).toBe(true)
+    if (!roundTrip.ok) return
+    // the JSON contract carries no false → validateJournal drops the marker…
+    expect(roundTrip.journal.memories.some((m) => m.excludedFromChapters === true)).toBe(false)
+    // …and still every memory groups the same way: grouping reads chapterId
+    // only, so the web book and the PDF (both feed buildChapters) are unaffected
+    const grouped = (memories: JournalMemory[]) =>
+      buildChapters(memories, 'ru', strings.ru.undatedChapter, journal.chapters).map((section) => [
+        section.label,
+        section.memories.map((m) => m.title),
+      ])
+    expect(grouped(roundTrip.journal.memories)).toEqual(grouped(journal.memories))
+  })
+
+  it('a memory excluded while the character has NO chapters keeps the marker and is not lost', () => {
+    const source = [
+      'ForeverJourneyDB = {',
+      '\t["schemaVersion"] = 3,',
+      '\t["characters"] = {',
+      '\t\t["R:S"] = {',
+      '\t\t\t["memories"] = {',
+      '\t\t\t\t{ ["type"] = "MANUAL_MEMORY", ["source"] = "USER", ["timestamp"] = 1780000000, ["chapterId"] = false, ["data"] = { ["title"] = "Без глав вообще" } },',
+      '\t\t\t},',
+      '\t\t},',
+      '\t},',
+      '}',
+    ].join('\n')
+    const journal = buildJournalFromSavedVariables(mustRead(source), 'R:S')
+    expect(journal?.memories).toHaveLength(1)
+    expect(journal?.memories[0].chapterId).toBeUndefined()
+    expect(journal?.memories[0].excludedFromChapters).toBe(true)
+    expect(journal?.chapters).toBeUndefined()
   })
 })
 

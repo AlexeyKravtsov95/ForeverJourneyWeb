@@ -685,6 +685,107 @@ const chroniclerChapters = indexed([
   },
 ])
 
+// ---------------------------------------------------------------------------
+// FJ-WEB-08: the 0.9.0 mass-move shape — Гордунни:Архивист. Since 0.9.0 the
+// addon can move memories between chapters, exclude them from every chapter
+// (chapterId = false) and return them to automatic binding (field absent).
+// Chapters a:1 (closed July 2 → July 15 12:00) and a:2 (open, July 20) share
+// one calendar month with the exclusions, so the book must keep three
+// separate July sections around the two author chapters.
+// ---------------------------------------------------------------------------
+const archivistMemories = [
+  // July 1, before any chapter → the first July section
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 1, 9),
+    location: 'Подгород',
+    data: { title: 'До всяких сводов', note: 'Журнал вёлся свободно, глав ещё не завели.' },
+  }),
+  // July 3, inside a:1's interval, explicitly EXCLUDED — must stay unassigned
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 3, 11),
+    location: 'Лок Модан',
+    favorite: true,
+    personalNote: 'Вычищено из главы после большой перенумерации.',
+    data: { title: 'Вырезано из свода', note: 'Игрок исключил запись из всех глав.' },
+    chapterId: false,
+  }),
+  // July 5, no binding → automatic membership by interval → a:1
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 5, 12),
+    location: 'Лок Модан',
+    data: { title: 'Само легло в свод', note: 'Привязки нет — интервал отдал запись главе.' },
+  }),
+  // July 7, timestamp inside a:1, but the mass move re-bound it to a:2 — the
+  // explicit binding wins regardless of time
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 7, 10),
+    location: 'Тирисфальские леса',
+    data: { title: 'Перенесено вперёд', note: 'Запись родилась в июле, а попала в поздний свод.' },
+    chapterId: 'a:2',
+  }),
+  // July 9, inside a:1, dangling binding to a deleted chapter — kept as data,
+  // never re-resolved by the interval
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 9, 14),
+    location: 'Серебряный бор',
+    data: { title: 'Ссылка в никуда', note: 'Главу удалили раньше, чем запись нашли.' },
+    chapterId: 'ghost',
+  }),
+  // July 12, inside a:1, second exclusion of the mass move
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 12, 16),
+    location: 'Подгород',
+    data: { title: 'Тоже вырезано', note: 'Ещё одна запись мимо сводов.' },
+    chapterId: false,
+  }),
+  // July 25, inside the OPEN chapter a:2, excluded — the open interval must
+  // not capture it either
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 25, 10),
+    location: 'Тирисфальские леса',
+    data: { title: 'Вырезано из открытой', note: 'Открытая глава тоже не заберёт запись.' },
+    chapterId: false,
+  }),
+  // July 27, no binding → automatic membership → a:2
+  memory({
+    type: 'MANUAL_MEMORY',
+    source: 'USER',
+    timestamp: chroniclerAt(6, 27, 17),
+    location: 'Серебряный бор',
+    data: { title: 'Хвост открытого свода', note: 'Конец июля без явной привязки.' },
+  }),
+]
+
+const archivistChapters = indexed([
+  {
+    id: 'a:1',
+    title: 'Первый свод',
+    description: 'Июльская опись: всё, что вошло в перепись до середины месяца.',
+    startedAt: chroniclerAt(6, 2),
+    closedAt: chroniclerAt(6, 15, 12),
+  },
+  {
+    id: 'a:2',
+    title: 'Второй свод',
+    description: 'Открытая опись после большой перенумерации.',
+    startedAt: chroniclerAt(6, 20),
+  },
+])
+
 const chaptersDb = {
   schemaVersion: 3,
   addonVersion: '0.8.0',
@@ -708,6 +809,14 @@ const chaptersDb = {
       activeChapterID: 'c:2',
       chapters: chroniclerChapters,
       memories: indexed(chroniclerMemories),
+    },
+    // the 0.9.0 mass-move shape: exclusions (chapterId = false), re-bindings
+    // to other chapters and automatic bindings mixed in one month
+    'Гордунни:Архивист': {
+      createdAt: chroniclerAt(6, 1, 8),
+      activeChapterID: 'a:2',
+      chapters: archivistChapters,
+      memories: indexed(archivistMemories),
     },
   },
 }

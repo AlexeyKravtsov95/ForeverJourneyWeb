@@ -82,6 +82,15 @@ export interface JournalMemory {
   location: string
   /** Binding to an author chapter (FJ-WEB-03); dangling ids stay unassigned. */
   chapterId?: string
+  /**
+   * SavedVariables `chapterId = false` (FJ-WEB-08, addon 0.9.0): the player
+   * explicitly excluded the memory from every chapter. Such a memory never
+   * receives an interval-derived binding and stays in the month sections.
+   * Only the SavedVariables import sets it — FJJOURNAL/FJBOOK1 carry no such
+   * value, and validateJournal leaves it out (their grouping reads chapterId
+   * only, so dropping the marker changes nothing there).
+   */
+  excludedFromChapters?: true
 }
 
 /**
