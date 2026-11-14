@@ -333,8 +333,13 @@ function toMemory(record: LuaTable): JournalMemory | null {
 
   if (!type && !title && !description && !asText(record.personalNote)) return null
 
-  // the chapter binding is data, kept verbatim like the rest of the player's text
+  // The chapter binding is data, kept verbatim like the rest of the player's
+  // text. chapterId = false (addon 0.9.0, FJ-WEB-08) is a value of its own —
+  // the player's explicit "no chapter ever" — and must never collapse into
+  // the missing-field case, which the interval assignment below treats as
+  // automatic membership.
   const chapterId = asText(record.chapterId).trim()
+  const excludedFromChapters = record.chapterId === false
 
   return {
     type: type || 'MEMORY',
@@ -347,6 +352,7 @@ function toMemory(record: LuaTable): JournalMemory | null {
     ...(timestamp !== undefined ? { timestamp } : {}),
     location: locationText(record.location),
     ...(chapterId !== '' ? { chapterId } : {}),
+    ...(excludedFromChapters ? { excludedFromChapters: true } : {}),
   }
 }
 
@@ -491,9 +497,11 @@ function findChapterForTimestamp(
  * Chapter membership follows the addon's own rules: an explicit valid
  * `memory.chapterId` wins; a memory with no binding is assigned by
  * Chapters.FindForTimestamp over the character's chapters (an explicit
- * dangling id is kept as data and never re-resolved). The assignment happens
- * on the converted model only — the parsed SavedVariables tables are never
- * rewritten.
+ * dangling id is kept as data and never re-resolved). `chapterId = false`
+ * (addon 0.9.0, FJ-WEB-08) is an explicit exclusion from every chapter: no
+ * interval assignment for it — the memory keeps its chronological month
+ * section. The assignment happens on the converted model only — the parsed
+ * SavedVariables tables are never rewritten.
  */
 export function buildJournalFromSavedVariables(
   parsed: SavedVariablesOk,
@@ -511,10 +519,18 @@ export function buildJournalFromSavedVariables(
   const memories = rawMemories
     .map(toMemory)
     .filter((memory): memory is JournalMemory => memory !== null)
-    // no explicit binding → the addon's interval rule (FJ-WEB-03 review):
-    // a fresh object per assignment, the source table stays untouched
+    // no binding at all → the addon's interval rule (FJ-WEB-03 review): a
+    // fresh object per assignment, the source table stays untouched. An
+    // explicit exclusion (chapterId = false, FJ-WEB-08) is a binding of its
+    // own: the memory stays unassigned and falls to the month sections.
     .map((memory) => {
-      if (memory.chapterId !== undefined || memory.timestamp === undefined) return memory
+      if (
+        memory.chapterId !== undefined ||
+        memory.excludedFromChapters === true ||
+        memory.timestamp === undefined
+      ) {
+        return memory
+      }
       const chapter = findChapterForTimestamp(chapters, memory.timestamp)
       return chapter ? { ...memory, chapterId: chapter.id } : memory
     })
